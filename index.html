@@ -169,6 +169,9 @@
 
         audio::-webkit-media-controls-panel { background-color: var(--grid-color); }
         audio::-webkit-media-controls-current-time-display, audio::-webkit-media-controls-time-remaining-display { color: var(--text-primary); }
+
+        /* Ensure IFrames inside embed containers span properly */
+        #music-embed-container iframe { width: 100% !important; height: 100% !important; border: none; border-radius: 6px; }
     </style>
 </head>
 <body>
@@ -197,10 +200,10 @@
             <div class="btn-row"><button class="floating-btn secondary" id="btn-toggle-habits">Hide Timeline Habits</button><button class="floating-btn secondary" id="btn-toggle-finance">Hide Finance</button></div>
             <div class="btn-row"><button class="floating-btn secondary" id="btn-theme-settings">Theme & Sync</button><button class="floating-btn" id="btn-snap-now">Snap to Now</button></div>
         </div>
-        <div id="instructions"><strong>Dbl-click</strong> empty space to add • Hover over backgrounds for Edit options</div>
+        <div id="instructions"><strong>Dbl-click</strong> empty space to add • Pinch to Zoom • Hover over backgrounds for Edit options</div>
     </div>
 
-    <!-- ================= FLOATING TOOL WINDOWS (Todo, Habits, Notes, etc. - EXACTLY AS BEFORE) ================= -->
+    <!-- ================= FLOATING TOOL WINDOWS ================= -->
     
     <div class="tool-window" id="tool-clock" data-def-x="auto" data-def-y="20" data-def-w="300" data-def-h="150" style="top:20px; right:20px; width:300px; height:150px; min-height: 100px; min-width: 200px;">
         <div class="drag-header" id="hdr-clock"><span>Clock</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-clock')">&times;</button></div>
@@ -287,22 +290,41 @@
     </div>
 
     <!-- MUSIC PLAYER TOOL -->
-    <div class="tool-window" id="tool-music" data-def-x="300" data-def-y="180" data-def-w="400" data-def-h="460" style="top:180px; left:300px; width:400px; height:460px;">
+    <div class="tool-window" id="tool-music" data-def-x="300" data-def-y="180" data-def-w="600" data-def-h="460" style="top:180px; left:300px; width:600px; height:460px;">
         <div class="drag-header" id="hdr-music"><span>Music Player</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-music')">&times;</button></div>
         <div class="tool-body" style="display:flex; flex-direction:column;">
             <div class="segmented-control" style="margin-bottom:12px;">
-                <div class="segmented-btn active" id="music-tab-embed" onclick="switchMusicTab('embed')">Web Embed</div>
+                <div class="segmented-btn active" id="music-tab-embed" onclick="switchMusicTab('embed')">Web Embeds</div>
                 <div class="segmented-btn" id="music-tab-local" onclick="switchMusicTab('local')">Local Files</div>
+                <div class="segmented-btn" id="music-tab-radio" onclick="switchMusicTab('radio')">Radio Streams</div>
             </div>
 
+            <!-- Embed View (Split Layout) -->
             <div id="view-music-embed" style="flex:1; display:flex; flex-direction:column; gap:10px;">
-                <textarea id="inp-music-embed" rows="3" placeholder="Paste embed code here (e.g. YouTube iframe, Spotify iframe...)" style="width:100%; resize:none;"></textarea>
-                <button class="btn btn-primary" onclick="loadMusicEmbed()">Load Embed</button>
-                <div id="music-embed-container" style="flex:1; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; overflow:hidden; display:flex; justify-content:center; align-items:center;">
-                    <span style="color:var(--text-secondary); font-size:12px;">Embed will appear here</span>
+                <div style="display:flex; justify-content:space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">Save iframe codes (YouTube, Spotify, etc.)</span>
+                    <div>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleEmbedEdit()">Edit / Move</button>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="addEmbedTab()">+ New Tab</button>
+                    </div>
+                </div>
+                <div class="split-layout" style="flex:1; min-height: 150px;">
+                    <div class="sidebar-left" id="embed-sidebar"></div>
+                    <div class="content-right" style="gap:10px; flex:1;">
+                        <div class="form-row" id="embed-add-row">
+                            <input type="text" id="inp-embed-name" placeholder="Song/Playlist Name" style="flex:1;">
+                            <input type="text" id="inp-embed-code" placeholder="Paste <iframe...> code" style="flex:2;">
+                            <button class="btn btn-primary" onclick="addMusicEmbed()">Add</button>
+                        </div>
+                        <div id="embed-list-container" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                        <div id="music-embed-container" style="height:150px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; overflow:hidden; display:flex; justify-content:center; align-items:center;">
+                            <span style="color:var(--text-secondary); font-size:12px;">Select an embed to play</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            <!-- Local Files View -->
             <div id="view-music-local" style="flex:1; display:none; flex-direction:column; gap:10px;">
                 <div style="display:flex; gap:8px; align-items:center;">
                     <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0;">
@@ -315,6 +337,29 @@
                 <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-top:5px;">Playlist Queue</div>
                 <div id="local-music-queue" style="flex:1; overflow-y:auto; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; padding:5px;">
                     <p style="color:var(--text-secondary); text-align:center; margin-top:10px; font-size:12px;">Queue is empty</p>
+                </div>
+            </div>
+
+            <!-- Radio View (Split Layout) -->
+            <div id="view-music-radio" style="flex:1; display:none; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; align-items: center;">
+                    <span style="font-size: 12px; color: var(--text-secondary);">Save direct audio stream URLs (.mp3, .aac, etc.)</span>
+                    <div>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleRadioEdit()">Edit / Move</button>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="addRadioTab()">+ New Tab</button>
+                    </div>
+                </div>
+                <div class="split-layout" style="flex:1; min-height: 150px;">
+                    <div class="sidebar-left" id="radio-sidebar"></div>
+                    <div class="content-right" style="gap:10px; flex:1;">
+                        <div class="form-row" id="radio-add-row">
+                            <input type="text" id="inp-radio-name" placeholder="Station Name" style="flex:1;">
+                            <input type="text" id="inp-radio-url" placeholder="Stream URL (http...)" style="flex:2;">
+                            <button class="btn btn-primary" onclick="addRadio()">Add</button>
+                        </div>
+                        <div id="radio-list-container" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                        <audio id="radio-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg);"></audio>
+                    </div>
                 </div>
             </div>
         </div>
@@ -526,7 +571,7 @@
 
     <script>
         // --- Core State & Configuration ---
-        const LOCAL_STORAGE_KEY = 'infinity_timeline_v19';
+        const LOCAL_STORAGE_KEY = 'infinity_timeline_v20';
         const PALETTE_KEY = 'infinity_palette_v4';
         const SYNC_KEY = 'infinity_sync_v1';
         
@@ -542,6 +587,11 @@
             habitTabs: ['Main'], activeHabitTab: 'Main', trackedHabits: [], habitCompletions: {}, activeHabitView: 'daily', habitOffset: 0, habitEditMode: false, habitCreateMode: false,
             notes: [{id: 'n1', title: 'Main Note', content: ''}], activeNoteId: 'n1', 
             notifications: [], customReminders: [], showRemindersView: false,
+            
+            // Music Player State
+            musicEmbedTabs: ['Favorites'], activeMusicEmbedTab: 'Favorites', musicEmbeds: [], musicEmbedEditMode: false,
+            radioTabs: ['Stations'], activeRadioTab: 'Stations', radios: [], radioEditMode: false,
+
             isDraggingCanvas: false, lastMouseX: 0, draggingEvent: null, resizingEvent: null, dragStartX: 0, dragStartTime: 0, dragDuration: 0, dragStartEnd: 0, hasDragged: false, activeEventId: null, modalEndMode: 'duration', modalBgMode: 'repeating', financeTypeModal: 'spending', activeStatTab: 'tasks', bgHitboxes: []
         };
 
@@ -635,9 +685,13 @@
             if(!state.customTodos) state.customTodos = []; if(!state.todoTabs) state.todoTabs = ['Inbox', 'Done']; if(!state.activeTodoTab) state.activeTodoTab = 'Inbox';
             if(!state.habitTabs) state.habitTabs = ['Main']; if(!state.activeHabitTab) state.activeHabitTab = 'Main'; if(!state.trackedHabits) state.trackedHabits = []; if(!state.habitCompletions) state.habitCompletions = {};
             if(!state.notes) state.notes = [{id: 'n1', title: 'Main Note', content: ''}]; if(!state.notifications) state.notifications = []; if(!state.customReminders) state.customReminders = [];
+            
+            if(!state.musicEmbedTabs) state.musicEmbedTabs = ['Favorites']; if(!state.activeMusicEmbedTab) state.activeMusicEmbedTab = 'Favorites'; if(!state.musicEmbeds) state.musicEmbeds = [];
+            if(!state.radioTabs) state.radioTabs = ['Stations']; if(!state.activeRadioTab) state.activeRadioTab = 'Stations'; if(!state.radios) state.radios = [];
+
             state.events.forEach(e => { if (!e.type) e.type = e.isMilestone ? 'milestone' : 'event'; if (e.zIndex === undefined) e.zIndex = 0; if (e.inTodoList && !e.todoTab) e.todoTab = 'Inbox'; });
             state.customTodos.forEach(c => { if(!c.tab) c.tab = 'Inbox'; });
-            state.habitEditMode = false; state.habitCreateMode = false; state.todoEditMode = false;
+            state.habitEditMode = false; state.habitCreateMode = false; state.todoEditMode = false; state.musicEmbedEditMode = false; state.radioEditMode = false;
         }
 
         async function bootApp() {
@@ -677,7 +731,7 @@
         }
 
         function renderAll() {
-            render(); renderTodos(); renderHabitTracker(); renderNotes(); renderStats(); renderNotifications(); renderCustomReminders();
+            render(); renderTodos(); renderHabitTracker(); renderNotes(); renderStats(); renderNotifications(); renderCustomReminders(); renderMusic();
         }
 
         function formatDatetimeForInput(ms) { const d = new Date(ms); return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16); }
@@ -705,31 +759,16 @@
         }
 
         // --- PWA / Homescreen Install Logic ---
-        
-        // 1. Register the Service Worker (Required for Android Chrome)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
-        }
+        if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
 
-        // 2. Catch the native install prompt
         let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            // Prevent Chrome from automatically showing its own mini-infobar
-            e.preventDefault();
-            // Save the event so it can be triggered by your button
-            deferredPrompt = e;
-        });
-
-        // 3. Trigger the prompt when the button is clicked
+        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
         window.installApp = async () => {
             if (deferredPrompt) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') { 
-                    deferredPrompt = null; 
-                }
+                if (outcome === 'accepted') { deferredPrompt = null; }
             } else {
-                // Fallback if the prompt isn't ready or on unsupported browsers
                 alert("To install as a full-screen app:\n\n📱 iOS: Tap the 'Share' icon at the bottom of Safari and select 'Add to Home Screen'.\n\n🤖 Android: If the prompt didn't appear, tap the browser menu (three dots) and select 'Add to Home screen'.");
             }
         };
@@ -762,6 +801,12 @@
             reader.readAsText(file);
             event.target.value = ''; // reset file input
         };
+
+        // --- Generic Utility for Dropdowns ---
+        function getGenericMoveDropdownHTML(tabs, currentTab, funcName, id) {
+            let opts = tabs.map(t => `<option value="${t}" ${t===currentTab?'selected':''}>${t}</option>`).join('');
+            return `<select class="btn btn-secondary" style="font-size:11px; padding:2px 4px; height:auto; width:80px;" onchange="${funcName}('${id}', this.value)">${opts}</select>`;
+        }
 
         // --- Core Rendering Engine ---
         function calculateLanes(visibleEvents) {
@@ -955,7 +1000,6 @@
         });
         document.getElementById('btn-delete').addEventListener('click', () => { if (confirm("Delete this?")) { state.events = state.events.filter(e => e.id !== state.activeEventId); saveToStorage(); render(); renderTodos(); closeModal(); } });
 
-        // --- Task Modal Sub-Logic (Duration, Backgrounds) ---
         document.getElementById('btn-bg-repeating').addEventListener('click', () => { state.modalBgMode = 'repeating'; document.getElementById('btn-bg-repeating').classList.add('active'); document.getElementById('btn-bg-oneoff').classList.remove('active'); document.getElementById('wrapper-standard-fields').style.display = 'none'; document.getElementById('wrapper-repeating-fields').style.display = 'block'; });
         document.getElementById('btn-bg-oneoff').addEventListener('click', () => { state.modalBgMode = 'one-off'; document.getElementById('btn-bg-oneoff').classList.add('active'); document.getElementById('btn-bg-repeating').classList.remove('active'); document.getElementById('wrapper-standard-fields').style.display = 'block'; document.getElementById('wrapper-repeating-fields').style.display = 'none'; });
         document.getElementById('btn-toggle-end-mode').addEventListener('click', () => { if (state.modalEndMode === 'duration') { state.modalEndMode = 'date'; document.getElementById('wrap-duration').style.display = 'none'; document.getElementById('wrap-end-date').style.display = 'block'; document.getElementById('lbl-end-mode').innerText = 'End Date'; document.getElementById('btn-toggle-end-mode').innerText = 'Set Duration instead'; } else { state.modalEndMode = 'duration'; document.getElementById('wrap-duration').style.display = 'flex'; document.getElementById('wrap-end-date').style.display = 'none'; document.getElementById('lbl-end-mode').innerText = 'Duration'; document.getElementById('btn-toggle-end-mode').innerText = 'Set End Date instead'; } });
@@ -990,74 +1034,95 @@
 
         // --- Music Player Logic ---
         window.switchMusicTab = (tab) => {
-            document.getElementById('music-tab-embed').classList.toggle('active', tab === 'embed');
-            document.getElementById('music-tab-local').classList.toggle('active', tab === 'local');
-            document.getElementById('view-music-embed').style.display = tab === 'embed' ? 'flex' : 'none';
-            document.getElementById('view-music-local').style.display = tab === 'local' ? 'flex' : 'none';
+            ['embed', 'local', 'radio'].forEach(t => {
+                document.getElementById('music-tab-'+t).classList.toggle('active', tab === t);
+                document.getElementById('view-music-'+t).style.display = tab === t ? 'flex' : 'none';
+            });
         };
 
-        window.loadMusicEmbed = () => {
-            const val = document.getElementById('inp-music-embed').value;
-            const container = document.getElementById('music-embed-container');
-            if (val.trim().toLowerCase().startsWith('<iframe')) {
-                container.innerHTML = val;
-                const iframe = container.querySelector('iframe');
-                if (iframe) { 
-                    iframe.style.width = '100%'; 
-                    iframe.style.height = '100%'; 
-                    iframe.style.border = 'none';
-                    iframe.style.borderRadius = '6px';
-                }
-            } else {
-                container.innerHTML = '<span style="color:var(--now-line); font-size:12px; font-weight:500;">Please paste a valid HTML &lt;iframe&gt; embed code.</span>';
-            }
+        // Web Embeds Playlists
+        window.switchMusicEmbedTab = (tab) => { state.activeMusicEmbedTab = tab; renderMusic(); };
+        window.addEmbedTab = () => { const t = prompt("New Tab Name:"); if(t && !state.musicEmbedTabs.includes(t)) { state.musicEmbedTabs.push(t); state.activeMusicEmbedTab = t; saveToStorage(); renderMusic(); } };
+        window.deleteEmbedTab = (tab) => { if(confirm(`Delete tab '${tab}' and all embeds inside?`)) { state.musicEmbedTabs = state.musicEmbedTabs.filter(t=>t!==tab); state.musicEmbeds = state.musicEmbeds.filter(e=>e.tab!==tab); state.activeMusicEmbedTab = state.musicEmbedTabs[0] || 'Favorites'; saveToStorage(); renderMusic(); } };
+        window.toggleEmbedEdit = () => { state.musicEmbedEditMode = !state.musicEmbedEditMode; renderMusic(); };
+        window.addMusicEmbed = () => {
+            const name = document.getElementById('inp-embed-name').value; const code = document.getElementById('inp-embed-code').value;
+            if(name && code) { state.musicEmbeds.push({id: 'emb_'+Date.now(), name, code, tab: state.activeMusicEmbedTab}); document.getElementById('inp-embed-name').value = ''; document.getElementById('inp-embed-code').value = ''; saveToStorage(); renderMusic(); }
         };
+        window.deleteMusicEmbed = (id) => { state.musicEmbeds = state.musicEmbeds.filter(x=>x.id!==id); saveToStorage(); renderMusic(); };
+        window.reorderMusicEmbed = (id, dir) => { const arr = state.musicEmbeds; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderMusic(); } } };
+        window.moveMusicEmbed = (id, newTab) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) { e.tab = newTab; saveToStorage(); renderMusic(); } };
+        window.playEmbed = (id) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) document.getElementById('music-embed-container').innerHTML = e.code; };
 
-        let localMusicPlaylist = [];
-        let currentLocalTrackIdx = 0;
-        const localAudioPlayer = document.getElementById('local-audio-player');
-        const localMusicQueueContainer = document.getElementById('local-music-queue');
+        // Radio Playlists
+        window.switchRadioTab = (tab) => { state.activeRadioTab = tab; renderMusic(); };
+        window.addRadioTab = () => { const t = prompt("New Tab Name:"); if(t && !state.radioTabs.includes(t)) { state.radioTabs.push(t); state.activeRadioTab = t; saveToStorage(); renderMusic(); } };
+        window.deleteRadioTab = (tab) => { if(confirm(`Delete tab '${tab}' and all stations inside?`)) { state.radioTabs = state.radioTabs.filter(t=>t!==tab); state.radios = state.radios.filter(e=>e.tab!==tab); state.activeRadioTab = state.radioTabs[0] || 'Stations'; saveToStorage(); renderMusic(); } };
+        window.toggleRadioEdit = () => { state.radioEditMode = !state.radioEditMode; renderMusic(); };
+        window.addRadio = () => {
+            const name = document.getElementById('inp-radio-name').value; const url = document.getElementById('inp-radio-url').value;
+            if(name && url) { state.radios.push({id: 'rad_'+Date.now(), name, url, tab: state.activeRadioTab}); document.getElementById('inp-radio-name').value = ''; document.getElementById('inp-radio-url').value = ''; saveToStorage(); renderMusic(); }
+        };
+        window.deleteRadio = (id) => { state.radios = state.radios.filter(x=>x.id!==id); saveToStorage(); renderMusic(); };
+        window.reorderRadio = (id, dir) => { const arr = state.radios; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderMusic(); } } };
+        window.moveRadio = (id, newTab) => { const r = state.radios.find(x=>x.id===id); if(r) { r.tab = newTab; saveToStorage(); renderMusic(); } };
+        window.playRadio = (id) => { const r = state.radios.find(x=>x.id===id); if(r) { const player = document.getElementById('radio-audio-player'); player.src = r.url; player.play(); } };
 
+        function renderMusic() {
+            // Render Embeds Side
+            const embSb = document.getElementById('embed-sidebar'); embSb.innerHTML = '';
+            state.musicEmbedTabs.forEach(t => {
+                const el = document.createElement('div'); el.className = `side-tab ${t === state.activeMusicEmbedTab ? 'active' : ''}`;
+                el.innerHTML = `<span>${t}</span> <button class="close-btn" style="font-size:12px; margin-left:8px; display:${state.musicEmbedTabs.length>1?'block':'none'}" onclick="event.stopPropagation(); deleteEmbedTab('${t}')">&times;</button>`;
+                el.onclick = () => switchMusicEmbedTab(t); embSb.appendChild(el);
+            });
+            const embC = document.getElementById('embed-list-container'); embC.innerHTML = '';
+            state.musicEmbeds.filter(e => e.tab === state.activeMusicEmbedTab).forEach(e => {
+                const item = document.createElement('div'); item.className = 'list-item'; item.style.cursor = 'pointer';
+                let controls = state.musicEmbedEditMode ? `<div class="right" onclick="event.stopPropagation()"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.musicEmbedTabs, e.tab, 'moveMusicEmbed', e.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteMusicEmbed('${e.id}')">&times;</button></div>` : '';
+                item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${e.name}">${e.name}</span></div>${controls}`;
+                item.onclick = () => playEmbed(e.id); embC.appendChild(item);
+            });
+
+            // Render Radios Side
+            const radSb = document.getElementById('radio-sidebar'); radSb.innerHTML = '';
+            state.radioTabs.forEach(t => {
+                const el = document.createElement('div'); el.className = `side-tab ${t === state.activeRadioTab ? 'active' : ''}`;
+                el.innerHTML = `<span>${t}</span> <button class="close-btn" style="font-size:12px; margin-left:8px; display:${state.radioTabs.length>1?'block':'none'}" onclick="event.stopPropagation(); deleteRadioTab('${t}')">&times;</button>`;
+                el.onclick = () => switchRadioTab(t); radSb.appendChild(el);
+            });
+            const radC = document.getElementById('radio-list-container'); radC.innerHTML = '';
+            state.radios.filter(r => r.tab === state.activeRadioTab).forEach(r => {
+                const item = document.createElement('div'); item.className = 'list-item'; item.style.cursor = 'pointer';
+                let controls = state.radioEditMode ? `<div class="right" onclick="event.stopPropagation()"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.radioTabs, r.tab, 'moveRadio', r.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteRadio('${r.id}')">&times;</button></div>` : '';
+                item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${r.name}">${r.name}</span></div>${controls}`;
+                item.onclick = () => playRadio(r.id); radC.appendChild(item);
+            });
+        }
+
+        // Local Files Player Logic
+        let localMusicPlaylist = []; let currentLocalTrackIdx = 0;
+        const localAudioPlayer = document.getElementById('local-audio-player'); const localMusicQueueContainer = document.getElementById('local-music-queue');
         document.getElementById('inp-music-local').addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            if (files.length === 0) return;
+            const files = Array.from(e.target.files); if (files.length === 0) return;
             files.forEach(file => { localMusicPlaylist.push({ name: file.name, url: URL.createObjectURL(file) }); });
             renderMusicQueue();
-            if(localAudioPlayer.src === '' || localAudioPlayer.ended || (localAudioPlayer.paused && localAudioPlayer.currentTime === 0)) {
-                playLocalTrack(localMusicPlaylist.length - files.length); 
-            }
+            if(localAudioPlayer.src === '' || localAudioPlayer.ended || (localAudioPlayer.paused && localAudioPlayer.currentTime === 0)) { playLocalTrack(localMusicPlaylist.length - files.length); }
         });
-
-        window.playLocalTrack = (idx) => {
-            if (idx < 0 || idx >= localMusicPlaylist.length) return;
-            currentLocalTrackIdx = idx;
-            localAudioPlayer.src = localMusicPlaylist[idx].url;
-            localAudioPlayer.play();
-            renderMusicQueue();
-        };
-
+        window.playLocalTrack = (idx) => { if (idx < 0 || idx >= localMusicPlaylist.length) return; currentLocalTrackIdx = idx; localAudioPlayer.src = localMusicPlaylist[idx].url; localAudioPlayer.play(); renderMusicQueue(); };
         localAudioPlayer.addEventListener('ended', () => { if (currentLocalTrackIdx + 1 < localMusicPlaylist.length) playLocalTrack(currentLocalTrackIdx + 1); });
-
         function renderMusicQueue() {
             localMusicQueueContainer.innerHTML = '';
             if(localMusicPlaylist.length === 0) { localMusicQueueContainer.innerHTML = '<p style="color:var(--text-secondary); text-align:center; margin-top:10px; font-size:12px;">Queue is empty</p>'; return; }
             localMusicPlaylist.forEach((track, i) => {
-                const item = document.createElement('div'); item.className = 'list-item';
-                if (i === currentLocalTrackIdx) item.style.borderLeft = '3px solid var(--accent-color)';
-                item.style.cursor = 'pointer';
+                const item = document.createElement('div'); item.className = 'list-item'; if (i === currentLocalTrackIdx) item.style.borderLeft = '3px solid var(--accent-color)'; item.style.cursor = 'pointer';
                 item.innerHTML = `<div class="left" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px;" title="${track.name}">${track.name}</div><button class="close-btn" style="font-size:14px" onclick="event.stopPropagation(); removeLocalTrack(${i})">&times;</button>`;
-                item.onclick = () => playLocalTrack(i);
-                localMusicQueueContainer.appendChild(item);
+                item.onclick = () => playLocalTrack(i); localMusicQueueContainer.appendChild(item);
             });
         }
-
-        window.removeLocalTrack = (idx) => {
-            URL.revokeObjectURL(localMusicPlaylist[idx].url); localMusicPlaylist.splice(idx, 1);
-            if (idx === currentLocalTrackIdx) { localAudioPlayer.pause(); localAudioPlayer.src = ''; if (localMusicPlaylist.length > 0) playLocalTrack(Math.min(idx, localMusicPlaylist.length - 1)); } else if (idx < currentLocalTrackIdx) { currentLocalTrackIdx--; }
-            renderMusicQueue();
-        };
-
+        window.removeLocalTrack = (idx) => { URL.revokeObjectURL(localMusicPlaylist[idx].url); localMusicPlaylist.splice(idx, 1); if (idx === currentLocalTrackIdx) { localAudioPlayer.pause(); localAudioPlayer.src = ''; if (localMusicPlaylist.length > 0) playLocalTrack(Math.min(idx, localMusicPlaylist.length - 1)); } else if (idx < currentLocalTrackIdx) { currentLocalTrackIdx--; } renderMusicQueue(); };
         window.clearMusicQueue = () => { if(confirm("Clear local music queue?")) { localMusicPlaylist.forEach(t => URL.revokeObjectURL(t.url)); localMusicPlaylist = []; localAudioPlayer.pause(); localAudioPlayer.src = ''; renderMusicQueue(); } };
+
 
         // --- Clock Tool ---
         function updateClock() { const now = new Date(); document.getElementById('clock-display').innerText = now.toLocaleTimeString(); requestAnimationFrame(updateClock); }
@@ -1126,12 +1191,6 @@
         window.deleteTodoTab = (tab) => { if(confirm(`Delete tab '${tab}' and all items?`)) { state.todoTabs = state.todoTabs.filter(t=>t!==tab); state.customTodos = state.customTodos.filter(c=>c.tab!==tab); state.events.forEach(e=>{if(e.todoTab===tab) e.inTodoList=false;}); state.activeTodoTab = state.todoTabs[0] || 'Inbox'; saveToStorage(); renderTodos(); }};
         window.toggleTodoEdit = () => { state.todoEditMode = !state.todoEditMode; renderTodos(); };
         
-        function getMoveDropdownHTML(currentTab, id, isTimeline, isHabit=false) {
-            const tabs = isHabit ? state.habitTabs : state.todoTabs;
-            let opts = tabs.map(t => `<option value="${t}" ${t===currentTab?'selected':''}>${t}</option>`).join('');
-            const func = isHabit ? `moveTrackedHabit('${id}', this.value)` : `moveTodo('${id}', this.value, ${isTimeline})`;
-            return `<select class="btn btn-secondary" style="font-size:11px; padding:2px 4px; height:auto; width:80px;" onchange="${func}">${opts}</select>`;
-        }
         window.moveTodo = (id, newTab, isTimeline) => { if(isTimeline) { const e = state.events.find(x=>x.id===id); if(e) e.todoTab = newTab; } else { const t = state.customTodos.find(x=>x.id===id); if(t) t.tab = newTab; } saveToStorage(); renderTodos(); };
         window.reorderCustomTodo = (id, dir) => { const arr = state.customTodos; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderTodos(); } } };
 
@@ -1146,16 +1205,19 @@
             state.events.filter(e => e.inTodoList && e.todoTab === state.activeTodoTab).forEach(ev => {
                 const timeStr = state.showTodoTime ? `<span style="font-size:10px; color:var(--text-secondary); margin-left:6px;">${new Date(ev.start).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>` : '';
                 const item = document.createElement('div'); item.className = `list-item ${ev.todoCompleted ? 'completed' : ''}`;
-                let controls = state.todoEditMode ? `<div class="right">${getMoveDropdownHTML(ev.todoTab, ev.id, true)}</div>` : '';
+                let controls = state.todoEditMode ? `<div class="right">${getGenericMoveDropdownHTML(state.todoTabs, ev.todoTab, 'moveTodoTimeline', ev.id)}</div>` : '';
                 item.innerHTML = `<div class="left"><input type="checkbox" ${ev.todoCompleted?'checked':''} onchange="toggleEventTodo('${ev.id}', this.checked)"><span class="task-title">${ev.title}${timeStr}</span></div>${controls}`; c.appendChild(item);
             });
             state.customTodos.filter(ct => ct.tab === state.activeTodoTab).forEach(ct => {
                 const item = document.createElement('div'); item.className = `list-item ${ct.completed ? 'completed' : ''}`;
-                let controls = state.todoEditMode ? `<div class="right"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', 1)">▼</button>${getMoveDropdownHTML(ct.tab, ct.id, false)}<button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>` : `<div class="right"><button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>`;
+                let controls = state.todoEditMode ? `<div class="right"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.todoTabs, ct.tab, 'moveCustomTodo', ct.id)}<button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>` : `<div class="right"><button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>`;
                 item.innerHTML = `<div class="left"><input type="checkbox" ${ct.completed?'checked':''} onchange="toggleCustomTodo('${ct.id}', this.checked)"><span class="task-title">${ct.title}</span></div>${controls}`; c.appendChild(item);
             });
             document.getElementById('inp-show-time').checked = state.showTodoTime;
         }
+
+        window.moveTodoTimeline = (id, tab) => moveTodo(id, tab, true);
+        window.moveCustomTodo = (id, tab) => moveTodo(id, tab, false);
 
         window.toggleEventTodo = (id, val) => { const e = state.events.find(x=>x.id===id); if(e) { e.todoCompleted = val; saveToStorage(); renderTodos(); }};
         window.toggleCustomTodo = (id, val) => { const t = state.customTodos.find(x=>x.id===id); if(t) { t.completed = val; saveToStorage(); renderTodos(); }};
@@ -1221,7 +1283,7 @@
                             rowHtml += `<div class="habit-cell"><input type="checkbox" style="width:20px; height:20px;" ${isChecked?'checked':''} onchange="toggleHabitComp('${h.id}', '${dStr}', this.checked)"></div>`;
                         } else { rowHtml += `<div class="habit-cell"><div class="inactive-box"></div></div>`; }
                     }
-                    let controls = state.habitEditMode ? `<div class="right" style="gap:4px;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', 1)">▼</button>${getMoveDropdownHTML(h.tab, h.id, false, true)}<button class="close-btn" style="color:#ef4444;" onclick="deleteTrackedHabit('${h.id}')">&times;</button></div>` : '';
+                    let controls = state.habitEditMode ? `<div class="right" style="gap:4px;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.habitTabs, h.tab, 'moveTrackedHabit', h.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteTrackedHabit('${h.id}')">&times;</button></div>` : '';
                     rowHtml += `<div class="habit-cell">${controls}</div></div>`;
                     c.innerHTML += rowHtml;
                 });
@@ -1240,7 +1302,7 @@
                 state.trackedHabits.filter(h => h.tab === state.activeHabitTab && h.type === state.activeHabitView).forEach(h => {
                     const isChecked = (state.habitCompletions[h.id] || []).includes(pValue);
                     const item = document.createElement('div'); item.className = `list-item ${isChecked?'completed':''}`;
-                    let controls = state.habitEditMode ? `<div class="right" style="gap:4px;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', 1)">▼</button>${getMoveDropdownHTML(h.tab, h.id, false, true)}<button class="close-btn" style="color:#ef4444;" onclick="deleteTrackedHabit('${h.id}')">&times;</button></div>` : '';
+                    let controls = state.habitEditMode ? `<div class="right" style="gap:4px;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.habitTabs, h.tab, 'moveTrackedHabit', h.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteTrackedHabit('${h.id}')">&times;</button></div>` : '';
                     item.innerHTML = `<div class="left"><input type="checkbox" ${isChecked?'checked':''} onchange="toggleHabitComp('${h.id}', '${pValue}', this.checked)"><span class="task-title">${h.title}</span></div>${controls}`;
                     c.appendChild(item);
                 });
@@ -1445,9 +1507,16 @@
         }
         window.dismissNotification = (id) => { const n = state.notifications.find(x=>x.id===id); if(n) n.dismissed = true; saveToStorage(); renderNotifications(); checkNotifications(); };
 
-        // --- Mouse Canvas Interactions ---
+        // --- Multi-Touch Pinch to Zoom & Canvas Interactions ---
+        let activePointers = [];
+        let initialPinchDist = null;
+        let initialPxPerMs = null;
+        let pinchCenterTime = null;
+
         canvas.addEventListener('pointerdown', (e) => {
             if (modalOverlay.classList.contains('active')) return;
+            
+            // Check Background Hitboxes First
             for (let box of state.bgHitboxes) {
                 if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) {
                     const bgIndex = state.events.findIndex(ev => ev.id === box.eventId);
@@ -1464,31 +1533,65 @@
                     } return; 
                 }
             }
-            state.isDraggingCanvas = true; state.lastMouseX = e.clientX; 
+
+            activePointers.push({ id: e.pointerId, x: e.clientX, y: e.clientY });
+            
+            if (activePointers.length === 2) {
+                initialPinchDist = Math.hypot(activePointers[0].x - activePointers[1].x, activePointers[0].y - activePointers[1].y);
+                initialPxPerMs = state.pxPerMs;
+                const centerX = (activePointers[0].x + activePointers[1].x) / 2;
+                pinchCenterTime = state.viewCenterTime + (centerX - canvas.width / 2) / state.pxPerMs;
+                state.isDraggingCanvas = false;
+                return; 
+            }
+
+            state.isDraggingCanvas = true; 
+            state.lastMouseX = e.clientX; 
         });
 
         window.addEventListener('pointermove', (e) => {
+            // Priority 1: Events Interaction
             if (state.resizingEvent) { const dX = e.clientX - state.dragStartX; if (Math.abs(dX) > 2) state.hasDragged = true; state.resizingEvent.end = Math.max(state.resizingEvent.start + 300000, state.dragStartEnd + (dX / state.pxPerMs)); render(); return; }
             if (state.draggingEvent) { const dX = e.clientX - state.dragStartX; if (Math.abs(dX) > 2) state.hasDragged = true; state.draggingEvent.start = state.dragStartTime + (dX / state.pxPerMs); state.draggingEvent.end = state.draggingEvent.start + state.dragDuration; render(); return; }
+            
+            // Priority 2: Pinch to Zoom
+            const ptr = activePointers.find(p => p.id === e.pointerId);
+            if (ptr) { ptr.x = e.clientX; ptr.y = e.clientY; }
+
+            if (activePointers.length === 2) {
+                const dist = Math.hypot(activePointers[0].x - activePointers[1].x, activePointers[0].y - activePointers[1].y);
+                if (initialPinchDist && dist > 0) {
+                    const scale = dist / initialPinchDist;
+                    state.pxPerMs = Math.max(config.minScale, Math.min(config.maxScale, initialPxPerMs * scale));
+                    const centerX = (activePointers[0].x + activePointers[1].x) / 2;
+                    state.viewCenterTime = pinchCenterTime - (centerX - canvas.width / 2) / state.pxPerMs;
+                    render();
+                }
+                return;
+            }
+
+            // Priority 3: Canvas Panning
             if (state.isDraggingCanvas) { state.viewCenterTime -= (e.clientX - state.lastMouseX) / state.pxPerMs; state.lastMouseX = e.clientX; render(); }
         });
 
-        window.addEventListener('pointerup', () => {
-            state.isDraggingCanvas = false;
+        const handlePointerRemove = (e) => {
+            activePointers = activePointers.filter(p => p.id !== e.pointerId);
+            if (activePointers.length < 2) { 
+                initialPinchDist = null; 
+                state.isDraggingCanvas = false; // Prevent jumping when releasing one finger
+            }
+            
             if (state.draggingEvent || state.resizingEvent) {
                 const activeEvt = state.draggingEvent || state.resizingEvent;
                 if (!state.hasDragged) openModal(activeEvt); else saveToStorage(); 
                 state.draggingEvent = null; state.resizingEvent = null; render(); 
             }
-        });
+        };
 
-        window.addEventListener('pointercancel', () => {
-            state.isDraggingCanvas = false;
-            if (state.draggingEvent || state.resizingEvent) {
-                state.draggingEvent = null; state.resizingEvent = null; render(); 
-            }
-        });
+        window.addEventListener('pointerup', handlePointerRemove);
+        window.addEventListener('pointercancel', handlePointerRemove);
 
+        // Desktop Zoom Support
         canvas.addEventListener('wheel', (e) => {
             if (modalOverlay.classList.contains('active')) return; e.preventDefault(); 
             const timeAtCursor = state.viewCenterTime + (e.clientX - canvas.width / 2) / state.pxPerMs;
