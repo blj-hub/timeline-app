@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Infinity Timeline Prototype</title>
+    
+    <!-- PWA / Fullscreen App Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"Infinity Timeline","short_name":"Timeline","display":"standalone","background_color":"#0f1115","theme_color":"#0f1115"}'>
+
     <style>
         :root {
             --bg-color: #0f1115; --ruler-bg: #15181e; --grid-color: #2a2d35;
@@ -501,6 +508,17 @@
                     </div>
                 </div>
 
+                <hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
+                <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Data Backup & App Install</h4>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="exportData()">📤 Export JSON</button>
+                    <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0; font-size:12px; cursor:pointer;">
+                        📥 Import JSON
+                        <input type="file" accept=".json" style="display:none;" onchange="importData(event)">
+                    </label>
+                </div>
+                <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="installApp()">📱 Add to Home Screen</button>
+
             </div>
             <div class="modal-footer"><button class="btn btn-secondary" id="btn-theme-reset">Reset Defaults</button><button class="btn btn-primary" onclick="closeModal()">Done</button></div>
         </div>
@@ -685,6 +703,52 @@
                 osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5);
             } catch(e) {} 
         }
+
+        // --- PWA / Homescreen Install Logic ---
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        window.installApp = async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') { deferredPrompt = null; }
+            } else {
+                alert("To install as a full-screen app:\n\n📱 iOS: Tap the 'Share' icon at the bottom of Safari and select 'Add to Home Screen'.\n\n🤖 Android: Tap the browser menu (three dots) and select 'Add to Home screen'.");
+            }
+        };
+
+        // --- Import / Export Logic ---
+        window.exportData = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "timeline_backup.json");
+            dlAnchorElem.click();
+        };
+
+        window.importData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    Object.assign(state, imported);
+                    normalizeLoadedState();
+                    saveToStorage();
+                    renderAll();
+                    alert("Data imported successfully!");
+                } catch (err) {
+                    alert("Error: Invalid JSON file.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // reset file input
+        };
 
         // --- Core Rendering Engine ---
         function calculateLanes(visibleEvents) {
