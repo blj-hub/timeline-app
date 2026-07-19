@@ -704,20 +704,33 @@
             } catch(e) {} 
         }
 
-        // --- PWA / Homescreen Install Logic ---
+// --- PWA / Homescreen Install Logic ---
+        
+        // 1. Register the Service Worker (Required for Android Chrome)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        // 2. Catch the native install prompt
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome from automatically showing its own mini-infobar
             e.preventDefault();
+            // Save the event so it can be triggered by your button
             deferredPrompt = e;
         });
 
+        // 3. Trigger the prompt when the button is clicked
         window.installApp = async () => {
             if (deferredPrompt) {
                 deferredPrompt.prompt();
                 const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') { deferredPrompt = null; }
+                if (outcome === 'accepted') { 
+                    deferredPrompt = null; 
+                }
             } else {
-                alert("To install as a full-screen app:\n\n📱 iOS: Tap the 'Share' icon at the bottom of Safari and select 'Add to Home Screen'.\n\n🤖 Android: Tap the browser menu (three dots) and select 'Add to Home screen'.");
+                // Fallback if the prompt isn't ready or on unsupported browsers
+                alert("To install as a full-screen app:\n\n📱 iOS: Tap the 'Share' icon at the bottom of Safari and select 'Add to Home Screen'.\n\n🤖 Android: If the prompt didn't appear, tap the browser menu (three dots) and select 'Add to Home screen'.");
             }
         };
 
