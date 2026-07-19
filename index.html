@@ -170,8 +170,15 @@
         audio::-webkit-media-controls-panel { background-color: var(--grid-color); }
         audio::-webkit-media-controls-current-time-display, audio::-webkit-media-controls-time-remaining-display { color: var(--text-primary); }
 
-        /* Ensure IFrames inside embed containers span properly */
-        #music-embed-container iframe { width: 100% !important; height: 100% !important; border: none; border-radius: 6px; }
+        /* Ensure IFrames scale cleanly without distortion */
+        #music-embed-container iframe { width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; border: none; border-radius: 6px; max-height: 100%; }
+
+        /* Mini Player Mode Overrides */
+        .mini-mode-active .hide-in-mini, .mini-mode-active .segmented-control, .mini-mode-active .sidebar-left { display: none !important; }
+        .mini-mode-active .tool-body { padding: 8px; flex-direction: column; }
+        .mini-mode-active .split-layout { display: flex; flex-direction: column; gap: 0; min-height: auto; }
+        .mini-mode-active .content-right { gap: 0; }
+        .mini-mode-active #music-embed-container { height: auto; min-height: 150px; }
     </style>
 </head>
 <body>
@@ -290,8 +297,14 @@
     </div>
 
     <!-- MUSIC PLAYER TOOL -->
-    <div class="tool-window" id="tool-music" data-def-x="300" data-def-y="180" data-def-w="600" data-def-h="460" style="top:180px; left:300px; width:600px; height:460px;">
-        <div class="drag-header" id="hdr-music"><span>Music Player</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-music')">&times;</button></div>
+    <div class="tool-window" id="tool-music" data-def-x="300" data-def-y="180" data-def-w="650" data-def-h="460" style="top:180px; left:300px; width:650px; height:460px;">
+        <div class="drag-header" id="hdr-music">
+            <span>Music Player</span>
+            <div>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleMusicMiniMode()">Mini Player</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-music')">&times;</button>
+            </div>
+        </div>
         <div class="tool-body" style="display:flex; flex-direction:column;">
             <div class="segmented-control" style="margin-bottom:12px;">
                 <div class="segmented-btn active" id="music-tab-embed" onclick="switchMusicTab('embed')">Web Embeds</div>
@@ -301,7 +314,7 @@
 
             <!-- Embed View (Split Layout) -->
             <div id="view-music-embed" style="flex:1; display:flex; flex-direction:column; gap:10px;">
-                <div style="display:flex; justify-content:space-between; align-items: center;">
+                <div class="hide-in-mini" style="display:flex; justify-content:space-between; align-items: center;">
                     <span style="font-size: 12px; color: var(--text-secondary);">Save iframe codes (YouTube, Spotify, etc.)</span>
                     <div>
                         <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleEmbedEdit()">Edit / Move</button>
@@ -309,15 +322,19 @@
                     </div>
                 </div>
                 <div class="split-layout" style="flex:1; min-height: 150px;">
-                    <div class="sidebar-left" id="embed-sidebar"></div>
+                    <div class="sidebar-left hide-in-mini" id="embed-sidebar"></div>
                     <div class="content-right" style="gap:10px; flex:1;">
-                        <div class="form-row" id="embed-add-row">
-                            <input type="text" id="inp-embed-name" placeholder="Song/Playlist Name" style="flex:1;">
-                            <input type="text" id="inp-embed-code" placeholder="Paste <iframe...> code" style="flex:2;">
-                            <button class="btn btn-primary" onclick="addMusicEmbed()">Add</button>
+                        <div class="form-row hide-in-mini" id="embed-quick-play">
+                            <input type="text" id="inp-embed-quick" placeholder="Quick play: Paste <iframe...> code here" style="flex:1;">
+                            <button class="btn btn-primary" onclick="playQuickEmbed()">Play</button>
                         </div>
-                        <div id="embed-list-container" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                        <div id="music-embed-container" style="height:150px; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; overflow:hidden; display:flex; justify-content:center; align-items:center;">
+                        <div class="form-row hide-in-mini" id="embed-add-row" style="display:none;">
+                            <input type="text" id="inp-embed-name" placeholder="Name" style="flex:1;">
+                            <input type="text" id="inp-embed-code" placeholder="Paste <iframe...> code" style="flex:2;">
+                            <button class="btn btn-primary" onclick="addMusicEmbed()">Save</button>
+                        </div>
+                        <div id="embed-list-container" class="hide-in-mini" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                        <div id="music-embed-container" style="background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; display:flex; justify-content:center; align-items:center;">
                             <span style="color:var(--text-secondary); font-size:12px;">Select an embed to play</span>
                         </div>
                     </div>
@@ -326,7 +343,7 @@
 
             <!-- Local Files View -->
             <div id="view-music-local" style="flex:1; display:none; flex-direction:column; gap:10px;">
-                <div style="display:flex; gap:8px; align-items:center;">
+                <div class="hide-in-mini" style="display:flex; gap:8px; align-items:center;">
                     <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0;">
                         Choose Audio Files
                         <input type="file" id="inp-music-local" accept="audio/*" multiple style="display:none;">
@@ -334,15 +351,15 @@
                     <button class="btn btn-danger" style="padding:8px; height:35px;" onclick="clearMusicQueue()" title="Clear Queue">🗑️</button>
                 </div>
                 <audio id="local-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg);"></audio>
-                <div style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-top:5px;">Playlist Queue</div>
-                <div id="local-music-queue" style="flex:1; overflow-y:auto; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; padding:5px;">
+                <div class="hide-in-mini" style="font-size:12px; font-weight:600; color:var(--text-secondary); margin-top:5px;">Playlist Queue</div>
+                <div id="local-music-queue" class="hide-in-mini" style="flex:1; overflow-y:auto; background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; padding:5px;">
                     <p style="color:var(--text-secondary); text-align:center; margin-top:10px; font-size:12px;">Queue is empty</p>
                 </div>
             </div>
 
             <!-- Radio View (Split Layout) -->
             <div id="view-music-radio" style="flex:1; display:none; flex-direction:column; gap:10px;">
-                <div style="display:flex; justify-content:space-between; align-items: center;">
+                <div class="hide-in-mini" style="display:flex; justify-content:space-between; align-items: center;">
                     <span style="font-size: 12px; color: var(--text-secondary);">Save direct audio stream URLs (.mp3, .aac, etc.)</span>
                     <div>
                         <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleRadioEdit()">Edit / Move</button>
@@ -350,15 +367,15 @@
                     </div>
                 </div>
                 <div class="split-layout" style="flex:1; min-height: 150px;">
-                    <div class="sidebar-left" id="radio-sidebar"></div>
+                    <div class="sidebar-left hide-in-mini" id="radio-sidebar"></div>
                     <div class="content-right" style="gap:10px; flex:1;">
-                        <div class="form-row" id="radio-add-row">
+                        <div class="form-row hide-in-mini" id="radio-add-row" style="display:none;">
                             <input type="text" id="inp-radio-name" placeholder="Station Name" style="flex:1;">
                             <input type="text" id="inp-radio-url" placeholder="Stream URL (http...)" style="flex:2;">
-                            <button class="btn btn-primary" onclick="addRadio()">Add</button>
+                            <button class="btn btn-primary" onclick="addRadio()">Save</button>
                         </div>
-                        <div id="radio-list-container" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                        <audio id="radio-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg);"></audio>
+                        <div id="radio-list-container" class="hide-in-mini" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
+                        <audio id="radio-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg); margin-top: auto;"></audio>
                     </div>
                 </div>
             </div>
@@ -571,7 +588,7 @@
 
     <script>
         // --- Core State & Configuration ---
-        const LOCAL_STORAGE_KEY = 'infinity_timeline_v20';
+        const LOCAL_STORAGE_KEY = 'infinity_timeline_v21';
         const PALETTE_KEY = 'infinity_palette_v4';
         const SYNC_KEY = 'infinity_sync_v1';
         
@@ -669,7 +686,6 @@
             }
         }
 
-        // Automatic Local Save + Cloud Debounce
         function saveToStorage() { 
             localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
             if(syncSettings.token && syncSettings.gistId) {
@@ -746,7 +762,6 @@
         function xToTime(x) { return state.viewCenterTime + (x - canvas.width / 2) / state.pxPerMs; }
         function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; render(); }
 
-        // --- Audio System (Timers) ---
         function playBeep() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -758,9 +773,7 @@
             } catch(e) {} 
         }
 
-        // --- PWA / Homescreen Install Logic ---
         if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js'); }
-
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
         window.installApp = async () => {
@@ -773,7 +786,6 @@
             }
         };
 
-        // --- Import / Export Logic ---
         window.exportData = () => {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
             const dlAnchorElem = document.createElement('a');
@@ -799,10 +811,9 @@
                 }
             };
             reader.readAsText(file);
-            event.target.value = ''; // reset file input
+            event.target.value = '';
         };
 
-        // --- Generic Utility for Dropdowns ---
         function getGenericMoveDropdownHTML(tabs, currentTab, funcName, id) {
             let opts = tabs.map(t => `<option value="${t}" ${t===currentTab?'selected':''}>${t}</option>`).join('');
             return `<select class="btn btn-secondary" style="font-size:11px; padding:2px 4px; height:auto; width:80px;" onchange="${funcName}('${id}', this.value)">${opts}</select>`;
@@ -1029,6 +1040,7 @@
                 t.style.top = t.getAttribute('data-def-y') + 'px'; t.style.left = t.getAttribute('data-def-x') === 'auto' ? 'auto' : t.getAttribute('data-def-x') + 'px';
                 if(t.getAttribute('data-def-x') === 'auto') t.style.right = '80px';
                 t.style.width = t.getAttribute('data-def-w') + 'px'; t.style.height = t.getAttribute('data-def-h') + 'px';
+                t.classList.remove('mini-mode-active');
             });
         };
 
@@ -1040,11 +1052,34 @@
             });
         };
 
+        window.toggleMusicMiniMode = () => {
+            const wnd = document.getElementById('tool-music');
+            wnd.classList.toggle('mini-mode-active');
+            if (wnd.classList.contains('mini-mode-active')) {
+                wnd.style.width = '350px'; wnd.style.height = 'auto'; wnd.style.minHeight = '150px';
+            } else {
+                wnd.style.width = '650px'; wnd.style.height = '460px'; wnd.style.minHeight = '250px';
+            }
+        };
+
         // Web Embeds Playlists
         window.switchMusicEmbedTab = (tab) => { state.activeMusicEmbedTab = tab; renderMusic(); };
         window.addEmbedTab = () => { const t = prompt("New Tab Name:"); if(t && !state.musicEmbedTabs.includes(t)) { state.musicEmbedTabs.push(t); state.activeMusicEmbedTab = t; saveToStorage(); renderMusic(); } };
         window.deleteEmbedTab = (tab) => { if(confirm(`Delete tab '${tab}' and all embeds inside?`)) { state.musicEmbedTabs = state.musicEmbedTabs.filter(t=>t!==tab); state.musicEmbeds = state.musicEmbeds.filter(e=>e.tab!==tab); state.activeMusicEmbedTab = state.musicEmbedTabs[0] || 'Favorites'; saveToStorage(); renderMusic(); } };
-        window.toggleEmbedEdit = () => { state.musicEmbedEditMode = !state.musicEmbedEditMode; renderMusic(); };
+        window.toggleEmbedEdit = () => { 
+            state.musicEmbedEditMode = !state.musicEmbedEditMode; 
+            document.getElementById('embed-quick-play').style.display = state.musicEmbedEditMode ? 'none' : 'flex';
+            document.getElementById('embed-add-row').style.display = state.musicEmbedEditMode ? 'flex' : 'none';
+            renderMusic(); 
+        };
+        
+        window.playQuickEmbed = () => {
+            const val = document.getElementById('inp-embed-quick').value;
+            const container = document.getElementById('music-embed-container');
+            if (val.trim().toLowerCase().startsWith('<iframe')) { container.innerHTML = val; }
+            else { container.innerHTML = '<span style="color:var(--now-line); font-size:12px;">Please paste a valid HTML &lt;iframe&gt; code.</span>'; }
+        };
+
         window.addMusicEmbed = () => {
             const name = document.getElementById('inp-embed-name').value; const code = document.getElementById('inp-embed-code').value;
             if(name && code) { state.musicEmbeds.push({id: 'emb_'+Date.now(), name, code, tab: state.activeMusicEmbedTab}); document.getElementById('inp-embed-name').value = ''; document.getElementById('inp-embed-code').value = ''; saveToStorage(); renderMusic(); }
@@ -1052,13 +1087,18 @@
         window.deleteMusicEmbed = (id) => { state.musicEmbeds = state.musicEmbeds.filter(x=>x.id!==id); saveToStorage(); renderMusic(); };
         window.reorderMusicEmbed = (id, dir) => { const arr = state.musicEmbeds; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderMusic(); } } };
         window.moveMusicEmbed = (id, newTab) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) { e.tab = newTab; saveToStorage(); renderMusic(); } };
+        window.updateMusicEmbed = (id, field, val) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) { e[field] = val; saveToStorage(); } };
         window.playEmbed = (id) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) document.getElementById('music-embed-container').innerHTML = e.code; };
 
         // Radio Playlists
         window.switchRadioTab = (tab) => { state.activeRadioTab = tab; renderMusic(); };
         window.addRadioTab = () => { const t = prompt("New Tab Name:"); if(t && !state.radioTabs.includes(t)) { state.radioTabs.push(t); state.activeRadioTab = t; saveToStorage(); renderMusic(); } };
         window.deleteRadioTab = (tab) => { if(confirm(`Delete tab '${tab}' and all stations inside?`)) { state.radioTabs = state.radioTabs.filter(t=>t!==tab); state.radios = state.radios.filter(e=>e.tab!==tab); state.activeRadioTab = state.radioTabs[0] || 'Stations'; saveToStorage(); renderMusic(); } };
-        window.toggleRadioEdit = () => { state.radioEditMode = !state.radioEditMode; renderMusic(); };
+        window.toggleRadioEdit = () => { 
+            state.radioEditMode = !state.radioEditMode; 
+            document.getElementById('radio-add-row').style.display = state.radioEditMode ? 'flex' : 'none';
+            renderMusic(); 
+        };
         window.addRadio = () => {
             const name = document.getElementById('inp-radio-name').value; const url = document.getElementById('inp-radio-url').value;
             if(name && url) { state.radios.push({id: 'rad_'+Date.now(), name, url, tab: state.activeRadioTab}); document.getElementById('inp-radio-name').value = ''; document.getElementById('inp-radio-url').value = ''; saveToStorage(); renderMusic(); }
@@ -1066,6 +1106,7 @@
         window.deleteRadio = (id) => { state.radios = state.radios.filter(x=>x.id!==id); saveToStorage(); renderMusic(); };
         window.reorderRadio = (id, dir) => { const arr = state.radios; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderMusic(); } } };
         window.moveRadio = (id, newTab) => { const r = state.radios.find(x=>x.id===id); if(r) { r.tab = newTab; saveToStorage(); renderMusic(); } };
+        window.updateRadio = (id, field, val) => { const r = state.radios.find(x=>x.id===id); if(r) { r[field] = val; saveToStorage(); } };
         window.playRadio = (id) => { const r = state.radios.find(x=>x.id===id); if(r) { const player = document.getElementById('radio-audio-player'); player.src = r.url; player.play(); } };
 
         function renderMusic() {
@@ -1078,10 +1119,26 @@
             });
             const embC = document.getElementById('embed-list-container'); embC.innerHTML = '';
             state.musicEmbeds.filter(e => e.tab === state.activeMusicEmbedTab).forEach(e => {
-                const item = document.createElement('div'); item.className = 'list-item'; item.style.cursor = 'pointer';
-                let controls = state.musicEmbedEditMode ? `<div class="right" onclick="event.stopPropagation()"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.musicEmbedTabs, e.tab, 'moveMusicEmbed', e.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteMusicEmbed('${e.id}')">&times;</button></div>` : '';
-                item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${e.name}">${e.name}</span></div>${controls}`;
-                item.onclick = () => playEmbed(e.id); embC.appendChild(item);
+                const item = document.createElement('div'); item.className = 'list-item'; 
+                if (state.musicEmbedEditMode) {
+                    item.innerHTML = `
+                        <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+                            <div style="display:flex; gap:4px; align-items:center;">
+                                <input type="text" value="${e.name.replace(/"/g, '&quot;')}" onchange="updateMusicEmbed('${e.id}', 'name', this.value)" style="flex:1;">
+                                <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', -1)">▲</button>
+                                <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderMusicEmbed('${e.id}', 1)">▼</button>
+                                ${getGenericMoveDropdownHTML(state.musicEmbedTabs, e.tab, 'moveMusicEmbed', e.id)}
+                                <button class="close-btn" style="color:#ef4444;" onclick="deleteMusicEmbed('${e.id}')">&times;</button>
+                            </div>
+                            <input type="text" value="${e.code.replace(/"/g, '&quot;')}" onchange="updateMusicEmbed('${e.id}', 'code', this.value)" style="width:100%;">
+                        </div>
+                    `;
+                } else {
+                    item.style.cursor = 'pointer';
+                    item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${e.name}">${e.name}</span></div>`;
+                    item.onclick = () => playEmbed(e.id);
+                }
+                embC.appendChild(item);
             });
 
             // Render Radios Side
@@ -1093,10 +1150,26 @@
             });
             const radC = document.getElementById('radio-list-container'); radC.innerHTML = '';
             state.radios.filter(r => r.tab === state.activeRadioTab).forEach(r => {
-                const item = document.createElement('div'); item.className = 'list-item'; item.style.cursor = 'pointer';
-                let controls = state.radioEditMode ? `<div class="right" onclick="event.stopPropagation()"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.radioTabs, r.tab, 'moveRadio', r.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteRadio('${r.id}')">&times;</button></div>` : '';
-                item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${r.name}">${r.name}</span></div>${controls}`;
-                item.onclick = () => playRadio(r.id); radC.appendChild(item);
+                const item = document.createElement('div'); item.className = 'list-item'; 
+                if (state.radioEditMode) {
+                    item.innerHTML = `
+                        <div style="display:flex; flex-direction:column; gap:6px; width:100%;">
+                            <div style="display:flex; gap:4px; align-items:center;">
+                                <input type="text" value="${r.name.replace(/"/g, '&quot;')}" onchange="updateRadio('${r.id}', 'name', this.value)" style="flex:1;">
+                                <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', -1)">▲</button>
+                                <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderRadio('${r.id}', 1)">▼</button>
+                                ${getGenericMoveDropdownHTML(state.radioTabs, r.tab, 'moveRadio', r.id)}
+                                <button class="close-btn" style="color:#ef4444;" onclick="deleteRadio('${r.id}')">&times;</button>
+                            </div>
+                            <input type="text" value="${r.url.replace(/"/g, '&quot;')}" onchange="updateRadio('${r.id}', 'url', this.value)" style="width:100%;">
+                        </div>
+                    `;
+                } else {
+                    item.style.cursor = 'pointer';
+                    item.innerHTML = `<div class="left"><span class="task-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${r.name}">${r.name}</span></div>`;
+                    item.onclick = () => playRadio(r.id);
+                }
+                radC.appendChild(item);
             });
         }
 
@@ -1516,7 +1589,6 @@
         canvas.addEventListener('pointerdown', (e) => {
             if (modalOverlay.classList.contains('active')) return;
             
-            // Check Background Hitboxes First
             for (let box of state.bgHitboxes) {
                 if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) {
                     const bgIndex = state.events.findIndex(ev => ev.id === box.eventId);
@@ -1544,17 +1616,14 @@
                 state.isDraggingCanvas = false;
                 return; 
             }
-
             state.isDraggingCanvas = true; 
             state.lastMouseX = e.clientX; 
         });
 
         window.addEventListener('pointermove', (e) => {
-            // Priority 1: Events Interaction
             if (state.resizingEvent) { const dX = e.clientX - state.dragStartX; if (Math.abs(dX) > 2) state.hasDragged = true; state.resizingEvent.end = Math.max(state.resizingEvent.start + 300000, state.dragStartEnd + (dX / state.pxPerMs)); render(); return; }
             if (state.draggingEvent) { const dX = e.clientX - state.dragStartX; if (Math.abs(dX) > 2) state.hasDragged = true; state.draggingEvent.start = state.dragStartTime + (dX / state.pxPerMs); state.draggingEvent.end = state.draggingEvent.start + state.dragDuration; render(); return; }
             
-            // Priority 2: Pinch to Zoom
             const ptr = activePointers.find(p => p.id === e.pointerId);
             if (ptr) { ptr.x = e.clientX; ptr.y = e.clientY; }
 
@@ -1569,8 +1638,6 @@
                 }
                 return;
             }
-
-            // Priority 3: Canvas Panning
             if (state.isDraggingCanvas) { state.viewCenterTime -= (e.clientX - state.lastMouseX) / state.pxPerMs; state.lastMouseX = e.clientX; render(); }
         });
 
@@ -1578,9 +1645,9 @@
             activePointers = activePointers.filter(p => p.id !== e.pointerId);
             if (activePointers.length < 2) { 
                 initialPinchDist = null; 
-                state.isDraggingCanvas = false; // Prevent jumping when releasing one finger
+                if (activePointers.length === 1) { state.lastMouseX = activePointers[0].x; state.isDraggingCanvas = true; } 
+                else { state.isDraggingCanvas = false; }
             }
-            
             if (state.draggingEvent || state.resizingEvent) {
                 const activeEvt = state.draggingEvent || state.resizingEvent;
                 if (!state.hasDragged) openModal(activeEvt); else saveToStorage(); 
@@ -1591,7 +1658,6 @@
         window.addEventListener('pointerup', handlePointerRemove);
         window.addEventListener('pointercancel', handlePointerRemove);
 
-        // Desktop Zoom Support
         canvas.addEventListener('wheel', (e) => {
             if (modalOverlay.classList.contains('active')) return; e.preventDefault(); 
             const timeAtCursor = state.viewCenterTime + (e.clientX - canvas.width / 2) / state.pxPerMs;
@@ -1611,13 +1677,11 @@
             anim();
         });
 
-        // --- View Toggles (Bound Directly) ---
         document.getElementById('btn-toggle-tasks').addEventListener('click', (e) => { state.showTasks = !state.showTasks; e.target.innerText = state.showTasks ? 'Hide Tasks/Milestones' : 'Show Tasks/Milestones'; render(); });
         document.getElementById('btn-toggle-habits').addEventListener('click', (e) => { state.showHabits = !state.showHabits; e.target.innerText = state.showHabits ? 'Hide Timeline Habits' : 'Show Timeline Habits'; render(); });
         document.getElementById('btn-toggle-finance').addEventListener('click', (e) => { state.showFinance = !state.showFinance; e.target.innerText = state.showFinance ? 'Hide Finance' : 'Show Finance'; render(); });
         document.getElementById('btn-toggle-bgs').addEventListener('click', (e) => { state.showBackgrounds = !state.showBackgrounds; e.target.innerText = state.showBackgrounds ? 'Hide Backgrounds' : 'Show Backgrounds'; render(); });
 
-        // --- Theme Settings Click Binding ---
         document.getElementById('btn-theme-settings').addEventListener('click', () => {
             document.getElementById('theme-bg').value = activeTheme.bgColor; document.getElementById('txt-theme-bg').value = activeTheme.bgColor;
             document.getElementById('theme-ruler').value = activeTheme.rulerBg; document.getElementById('txt-theme-ruler').value = activeTheme.rulerBg;
@@ -1636,7 +1700,6 @@
             closeModal(); document.getElementById('modal-theme').classList.add('active'); modalOverlay.classList.add('active');
         });
 
-        // --- Init ---
         renderPalette(); applyTheme(); bootApp();
         window.addEventListener('resize', resizeCanvas);
     </script>
