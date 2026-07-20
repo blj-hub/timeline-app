@@ -72,7 +72,7 @@
         }
         button.floating-btn:hover { transform: translateY(-2px); }
         button.floating-btn.secondary { background-color: var(--grid-color); color: var(--text-primary); }
-        button.circle-btn { width: 36px; height: 36px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+        button.circle-btn { width: 30px; height: 30px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; }
 
         .badge { position: absolute; top: -5px; right: -5px; background: #ef4444; color: #fff; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
         #instructions { position: absolute; bottom: 30px; left: 30px; color: var(--text-secondary); font-size: 12px; z-index: 10; pointer-events: none; }
@@ -100,6 +100,8 @@
         .segmented-control { display: flex; background: var(--input-bg); border-radius: 6px; border: 1px solid var(--input-border); overflow: hidden; }
         .segmented-btn { flex: 1; padding: 6px; text-align: center; font-size: 12px; cursor: pointer; color: var(--text-secondary); transition: 0.1s; }
         .segmented-btn.active { background: var(--accent-color); color: #fff; }
+
+        .timer-btn { padding: 8px 24px !important; font-size: 13px !important; border-radius: 20px !important; font-weight: 600 !important; letter-spacing: 0.5px; text-transform: uppercase; }
 
         /* Strict Overlays */
         #modal-overlay {
@@ -134,7 +136,7 @@
         .tool-window {
             position: fixed; background: var(--modal-bg); border: 1px solid var(--modal-border); border-radius: 8px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 200; display: none; flex-direction: column;
-            resize: both; overflow: hidden; min-width: 350px; min-height: 250px;
+            resize: both; overflow: hidden; min-width: 350px; min-height: 250px; transition: background 0.2s, box-shadow 0.2s, border 0.2s;
         }
         .tool-window.active { display: flex; }
         .drag-header {
@@ -143,8 +145,29 @@
         }
         .tool-body { flex: 1; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
         
+        /* Frameless Options */
+        .tool-window.frameless { background: transparent !important; border: none !important; box-shadow: none !important; overflow: visible !important; }
+        .tool-window.frameless .drag-header { 
+            position: absolute; bottom: 100%; left: -1px; width: calc(100% + 2px); height: auto; 
+            padding: 8px 16px; opacity: 0; z-index: 100;
+            background: var(--modal-bg) !important;
+            border: 1px solid var(--modal-border); border-bottom: none; border-radius: 8px 8px 0 0;
+            transition: opacity 0.2s ease;
+        }
+        .tool-window.frameless:hover .drag-header { opacity: 1; }
+        .tool-window.frameless .tool-body { 
+            background: transparent !important; padding: 0 !important; border: none !important; 
+            height: 100%; width: 100%; overflow: visible;
+        }
+        
+        /* Specific elements to hide when frameless */
+        .tool-window.frameless .segmented-control,
+        .tool-window.frameless .todo-hide-frameless,
+        .tool-window.frameless .habit-hide-frameless,
+        .tool-window.frameless .notes-hide-frameless { display: none !important; }
+
         /* Layouts & Items */
-        .list-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 6px; margin-bottom: 8px; }
+        .list-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 10px; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 6px; margin-bottom: 8px; }
         .list-item .left { display: flex; align-items: center; gap: 10px; flex: 1; }
         .list-item .right { display: flex; align-items: center; gap: 8px; }
         .list-item.completed span.task-title { opacity: 0.5; text-decoration: line-through; }
@@ -173,12 +196,15 @@
         /* Ensure IFrames scale cleanly without distortion */
         #music-embed-container iframe { width: 100% !important; height: auto !important; aspect-ratio: 16 / 9; border: none; border-radius: 6px; max-height: 100%; }
 
-        /* Mini Player Mode Overrides */
-        .mini-mode-active .hide-in-mini, .mini-mode-active .segmented-control, .mini-mode-active .sidebar-left { display: none !important; }
+        /* Mini Player Mode Overrides via pure CSS class */
+        .tool-window.mini-mode-active { width: 350px !important; height: auto !important; min-height: 150px !important; }
+        .mini-mode-active #music-tabs-control, .mini-mode-active .sidebar-left, .mini-mode-active .hide-in-mini { display: none !important; }
         .mini-mode-active .tool-body { padding: 8px; flex-direction: column; }
         .mini-mode-active .split-layout { display: flex; flex-direction: column; gap: 0; min-height: auto; }
         .mini-mode-active .content-right { gap: 0; }
         .mini-mode-active #music-embed-container { height: auto; min-height: 150px; }
+        
+        #clock-display { white-space: nowrap; font-variant-numeric: tabular-nums; font-size: max(24px, 15cqw); text-align: center; width: 100%; }
     </style>
 </head>
 <body>
@@ -189,23 +215,31 @@
         <div id="now-line"></div>
         
         <div id="ui-layer-left">
-            <button class="floating-btn" onclick="openTool('tool-todo')">Todo List</button>
-            <button class="floating-btn" onclick="openTool('tool-habits')">Habits Tracker</button>
-            <button class="floating-btn" onclick="openTool('tool-notes')">Notes</button>
-            <button class="floating-btn" onclick="openTool('tool-stats')">Statistics</button>
-            <button class="floating-btn" onclick="openTool('tool-timers')">Timers</button>
-            <button class="floating-btn" onclick="openTool('tool-music')">Music Player</button>
-            <button class="floating-btn" onclick="openTool('tool-notif')">Notifications <span id="notif-badge" class="badge" style="display:none;">0</span></button>
+            <div id="left-menu-list" style="display:flex; flex-direction:column; gap:8px;">
+                <button class="floating-btn" onclick="openTool('tool-todo')">Todo List</button>
+                <button class="floating-btn" onclick="openTool('tool-habits')">Habits Tracker</button>
+                <button class="floating-btn" onclick="openTool('tool-notes')">Notes</button>
+                <button class="floating-btn" onclick="openTool('tool-stats')">Statistics</button>
+                <button class="floating-btn" onclick="openTool('tool-timers')">Timers</button>
+                <button class="floating-btn" onclick="openTool('tool-music')">Music Player</button>
+                <button class="floating-btn" onclick="openTool('tool-notif')">Notifications <span id="notif-badge" class="badge" style="display:none;">0</span></button>
+            </div>
             <div style="display: flex; gap: 8px; margin-top: 12px;">
-                <button class="floating-btn secondary circle-btn" onclick="openTool('tool-clock')" title="Clock">🕘</button>
-                <button class="floating-btn secondary circle-btn" onclick="resetToolWindows()" title="Reset Windows">R</button>
+                <button class="floating-btn secondary circle-btn" id="btn-ui-toggle" onclick="toggleUIMenus()" title="Hide UI Menus">-</button>
+                <button class="floating-btn secondary circle-btn" id="btn-ui-clock" onclick="openTool('tool-clock')" title="Clock">🕘</button>
+                <button class="floating-btn secondary circle-btn" id="btn-ui-reset" onclick="resetToolWindows()" title="Reset Windows">R</button>
             </div>
         </div>
 
         <div id="ui-layer-right">
-            <div class="btn-row"><button class="floating-btn secondary" id="btn-toggle-tasks">Hide Tasks/Milestones</button><button class="floating-btn secondary" id="btn-toggle-bgs">Hide Backgrounds</button></div>
-            <div class="btn-row"><button class="floating-btn secondary" id="btn-toggle-habits">Hide Timeline Habits</button><button class="floating-btn secondary" id="btn-toggle-finance">Hide Finance</button></div>
-            <div class="btn-row"><button class="floating-btn secondary" id="btn-theme-settings">Theme & Sync</button><button class="floating-btn" id="btn-snap-now">Snap to Now</button></div>
+            <div id="right-menu-list" style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+                <div class="btn-row"><button class="floating-btn secondary" id="btn-toggle-tasks">Hide Tasks/Milestones</button><button class="floating-btn secondary" id="btn-toggle-bgs">Hide Backgrounds</button></div>
+                <div class="btn-row"><button class="floating-btn secondary" id="btn-toggle-habits">Hide Timeline Habits</button><button class="floating-btn secondary" id="btn-toggle-finance">Hide Finance</button></div>
+            </div>
+            <div class="btn-row" style="margin-top:8px;">
+                <button class="floating-btn secondary" id="btn-theme-settings">Theme & Sync</button>
+                <button class="floating-btn" id="btn-snap-now">Snap to Now</button>
+            </div>
         </div>
         <div id="instructions"><strong>Dbl-click</strong> empty space to add • Pinch to Zoom • Hover over backgrounds for Edit options</div>
     </div>
@@ -213,14 +247,26 @@
     <!-- ================= FLOATING TOOL WINDOWS ================= -->
     
     <div class="tool-window" id="tool-clock" data-def-x="auto" data-def-y="20" data-def-w="300" data-def-h="150" style="top:20px; right:20px; width:300px; height:150px; min-height: 100px; min-width: 200px;">
-        <div class="drag-header" id="hdr-clock"><span>Clock</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-clock')">&times;</button></div>
+        <div class="drag-header" id="hdr-clock">
+            <span>Clock</span>
+            <div>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-clock')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-clock')">&times;</button>
+            </div>
+        </div>
         <div class="tool-body" style="container-type: inline-size; display:flex; justify-content:center; align-items:center; flex:1; padding:0; overflow:hidden;">
-             <div id="clock-display" style="font-size: 18cqw; font-weight:bold; font-variant-numeric: tabular-nums;">00:00:00</div>
+             <div id="clock-display" style="font-weight:bold;">00:00:00</div>
         </div>
     </div>
 
     <div class="tool-window" id="tool-timers" data-def-x="250" data-def-y="100" data-def-w="380" data-def-h="320" style="top:100px; left:250px; width:380px; height:320px;">
-        <div class="drag-header" id="hdr-timers"><span>Timers</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-timers')">&times;</button></div>
+        <div class="drag-header" id="hdr-timers">
+            <span>Timers</span>
+            <div>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-timers')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-timers')">&times;</button>
+            </div>
+        </div>
         <div class="tool-body" style="overflow:hidden; display:flex; flex-direction:column;">
             <div class="segmented-control" style="margin-bottom:15px;">
                 <div class="segmented-btn active" id="timer-tab-pomo" onclick="switchTimerTab('pomo')">Pomodoro</div>
@@ -229,8 +275,8 @@
             </div>
 
             <!-- Pomodoro View -->
-            <div id="view-pomo" style="flex:1; display:flex; flex-direction:column; justify-content:space-between;">
-                <div id="pomo-setup-view" style="display:flex; gap:10px; text-align:center;">
+            <div id="view-pomo" style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; gap: 20px;">
+                <div id="pomo-setup-view" style="display:flex; width:100%; gap:10px; text-align:center;">
                     <div style="background:var(--ruler-bg); padding:10px; border-radius:8px; flex:1;">
                         <div style="font-size:11px; color:var(--text-secondary); margin-bottom:5px;">Session</div>
                         <input type="number" class="no-spinners" id="pomo-session" value="30" min="1" max="120" style="width:100%; text-align:center; font-size:28px; font-weight:bold; background:none; border:none; padding:0;">
@@ -247,20 +293,20 @@
                         <div style="font-size:11px; color:var(--text-secondary);">times</div>
                     </div>
                 </div>
-                <div id="pomo-run-view" style="display:none; text-align:center; flex:1; flex-direction:column; justify-content:center;">
+                <div id="pomo-run-view" style="display:none; text-align:center; flex:0 1 auto; flex-direction:column; justify-content:center;">
                     <div id="pomo-current-label" style="font-size:14px; color:var(--accent-color); font-weight:bold; margin-bottom:5px;">SESSION</div>
                     <div id="pomo-time-display" style="font-size:64px; font-weight:bold; font-variant-numeric: tabular-nums; line-height:1;">00:00</div>
                 </div>
-                <div id="pomo-sequence" style="display:flex; justify-content:center; gap:5px; margin:15px 0; flex-wrap:wrap;"></div>
-                <div style="display:flex; gap:10px;">
-                    <button class="btn btn-secondary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="stopPomodoro()" id="btn-pomo-stop" disabled>STOP</button>
-                    <button class="btn btn-primary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="togglePomodoro()" id="btn-pomo-start">START SESSION</button>
+                <div id="pomo-sequence" style="display:flex; justify-content:center; width:100%; gap:5px; flex-wrap:wrap;"></div>
+                <div style="display:flex; gap:10px; justify-content:center; width:100%;">
+                    <button class="btn btn-secondary timer-btn" style="flex:1;" onclick="stopPomodoro()" id="btn-pomo-stop" disabled>STOP</button>
+                    <button class="btn btn-primary timer-btn" style="flex:1;" onclick="togglePomodoro()" id="btn-pomo-start">START SESSION</button>
                 </div>
             </div>
 
             <!-- Standard Timer View -->
-            <div id="view-tmr" style="flex:1; display:none; flex-direction:column; justify-content:space-between;">
-                <div id="tmr-setup-view" style="display:flex; gap:10px; text-align:center;">
+            <div id="view-tmr" style="flex:1; display:none; flex-direction:column; justify-content:center; align-items:center; gap: 20px;">
+                <div id="tmr-setup-view" style="display:flex; width:100%; gap:10px; text-align:center;">
                     <div style="background:var(--ruler-bg); padding:10px; border-radius:8px; flex:1;">
                         <input type="number" class="no-spinners" id="tmr-h" value="00" min="0" max="99" style="width:100%; text-align:center; font-size:36px; font-weight:bold; background:none; border:none; padding:0;">
                         <div style="font-size:11px; color:var(--text-secondary);">h</div>
@@ -274,23 +320,23 @@
                         <div style="font-size:11px; color:var(--text-secondary);">s</div>
                     </div>
                 </div>
-                <div id="tmr-run-view" style="display:none; text-align:center; flex:1; flex-direction:column; justify-content:center;">
+                <div id="tmr-run-view" style="display:none; text-align:center; flex:0 1 auto; flex-direction:column; justify-content:center;">
                     <div id="tmr-time-display" style="font-size:64px; font-weight:bold; font-variant-numeric: tabular-nums; line-height:1;">00:00:00</div>
                 </div>
-                <div style="display:flex; gap:10px; margin-top:20px;">
-                    <button class="btn btn-secondary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="stopTimer()" id="btn-tmr-stop" disabled>STOP</button>
-                    <button class="btn btn-primary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="toggleTimer()" id="btn-tmr-start">START</button>
+                <div style="display:flex; gap:10px; justify-content:center; width:100%;">
+                    <button class="btn btn-secondary timer-btn" style="flex:1;" onclick="stopTimer()" id="btn-tmr-stop" disabled>STOP</button>
+                    <button class="btn btn-primary timer-btn" style="flex:1;" onclick="toggleTimer()" id="btn-tmr-start">START</button>
                 </div>
             </div>
 
             <!-- Stopwatch View -->
-            <div id="view-sw" style="flex:1; display:none; flex-direction:column; justify-content:space-between;">
-                <div style="flex:1; display:flex; justify-content:center; align-items:center;">
+            <div id="view-sw" style="flex:1; display:none; flex-direction:column; justify-content:center; align-items:center; gap: 20px;">
+                <div style="flex:1; display:flex; justify-content:center; align-items:center; width:100%;">
                     <div id="sw-time-display" style="font-size:56px; font-weight:bold; font-variant-numeric: tabular-nums; text-align:center;">00:00:00.0</div>
                 </div>
-                <div style="display:flex; gap:10px; margin-top:15px;">
-                    <button class="btn btn-secondary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="resetStopwatch()">RESET</button>
-                    <button class="btn btn-primary" style="flex:1; border-radius:20px; font-weight:bold;" onclick="toggleStopwatch()" id="btn-sw-start">START</button>
+                <div style="display:flex; gap:10px; justify-content:center; width:100%;">
+                    <button class="btn btn-secondary timer-btn" style="flex:1;" onclick="resetStopwatch()">RESET</button>
+                    <button class="btn btn-primary timer-btn" style="flex:1;" onclick="toggleStopwatch()" id="btn-sw-start">START</button>
                 </div>
             </div>
         </div>
@@ -302,11 +348,12 @@
             <span>Music Player</span>
             <div>
                 <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleMusicMiniMode()">Mini Player</button>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-music')" title="Toggle Frameless">-</button>
                 <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-music')">&times;</button>
             </div>
         </div>
         <div class="tool-body" style="display:flex; flex-direction:column;">
-            <div class="segmented-control" style="margin-bottom:12px;">
+            <div class="segmented-control" id="music-tabs-control" style="margin-bottom:12px;">
                 <div class="segmented-btn active" id="music-tab-embed" onclick="switchMusicTab('embed')">Web Embeds</div>
                 <div class="segmented-btn" id="music-tab-local" onclick="switchMusicTab('local')">Local Files</div>
                 <div class="segmented-btn" id="music-tab-radio" onclick="switchMusicTab('radio')">Radio Streams</div>
@@ -317,8 +364,8 @@
                 <div class="hide-in-mini" style="display:flex; justify-content:space-between; align-items: center;">
                     <span style="font-size: 12px; color: var(--text-secondary);">Save iframe codes (YouTube, Spotify, etc.)</span>
                     <div>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleTabs('music')">Tabs</button>
                         <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleEmbedEdit()">Edit / Move</button>
-                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="addEmbedTab()">+ New Tab</button>
                     </div>
                 </div>
                 <div class="split-layout" style="flex:1; min-height: 150px;">
@@ -339,6 +386,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="music-new-embed-tab-wrap" class="hide-in-mini" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addEmbedTab()">+ New Tab</button></div>
             </div>
 
             <!-- Local Files View -->
@@ -362,8 +410,8 @@
                 <div class="hide-in-mini" style="display:flex; justify-content:space-between; align-items: center;">
                     <span style="font-size: 12px; color: var(--text-secondary);">Save direct audio stream URLs (.mp3, .aac, etc.)</span>
                     <div>
+                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleTabs('music')">Tabs</button>
                         <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="toggleRadioEdit()">Edit / Move</button>
-                        <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="addRadioTab()">+ New Tab</button>
                     </div>
                 </div>
                 <div class="split-layout" style="flex:1; min-height: 150px;">
@@ -375,9 +423,12 @@
                             <button class="btn btn-primary" onclick="addRadio()">Save</button>
                         </div>
                         <div id="radio-list-container" class="hide-in-mini" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                        <audio id="radio-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg); margin-top: auto;"></audio>
+                        <div style="display:flex; align-items:center; justify-content:center; width: 100%;">
+                            <audio id="radio-audio-player" controls style="width:100%; outline:none; border-radius:6px; background:var(--ruler-bg);"></audio>
+                        </div>
                     </div>
                 </div>
+                <div id="music-new-radio-tab-wrap" class="hide-in-mini" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addRadioTab()">+ New Tab</button></div>
             </div>
         </div>
     </div>
@@ -387,18 +438,23 @@
     <div class="tool-window" id="tool-todo" data-def-x="160" data-def-y="100" data-def-w="500" data-def-h="500" style="top:100px; left:160px; width:500px; height:500px;">
         <div class="drag-header" id="hdr-todo">
             <span>Todo List</span>
-            <div><button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleTodoEdit()">Edit / Move</button><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-todo')">&times;</button></div>
+            <div>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleTabs('todo')">Tabs</button>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleTodoEdit()">Edit / Move</button>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-todo')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-todo')">&times;</button>
+            </div>
         </div>
         <div class="tool-body">
             <div class="split-layout">
                 <div class="sidebar-left" id="todo-sidebar"></div>
                 <div class="content-right" style="gap: 10px;">
-                    <div class="form-row"><input type="text" id="inp-new-todo" placeholder="Add custom todo..." style="flex:1;"><button class="btn btn-primary" onclick="addCustomTodo()">Add</button></div>
-                    <label style="display:flex; gap:4px; align-items:center; cursor:pointer;"><input type="checkbox" id="inp-show-time" onchange="toggleTodoTime(this.checked)"> Show timeline date/time</label>
+                    <div class="form-row todo-hide-frameless"><input type="text" id="inp-new-todo" placeholder="Add custom todo..." style="flex:1;"><button class="btn btn-primary" onclick="addCustomTodo()">Add</button></div>
+                    <label class="todo-hide-frameless" style="display:flex; gap:4px; align-items:center; cursor:pointer;"><input type="checkbox" id="inp-show-time" onchange="toggleTodoTime(this.checked)"> Show timeline date/time</label>
                     <div id="todo-list-container" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
                 </div>
             </div>
-            <div style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addTodoTab()">+ New Tab</button></div>
+            <div id="todo-new-tab-btn-wrap" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addTodoTab()">+ New Tab</button></div>
         </div>
     </div>
 
@@ -407,7 +463,9 @@
         <div class="drag-header" id="hdr-habits">
             <span>Habits Tracker</span>
             <div>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleTabs('habits')">Tabs</button>
                 <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleHabitEdit()">Edit / Move</button>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-habits')" title="Toggle Frameless">-</button>
                 <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-habits')">&times;</button>
             </div>
         </div>
@@ -430,11 +488,11 @@
                         <button class="btn btn-secondary" style="padding:4px 10px;" onclick="changeHabitOffset(1)">Next &gt;</button>
                     </div>
 
-                    <div id="habit-edit-controls" style="display:none; margin-bottom:12px;">
+                    <div id="habit-edit-controls" class="habit-hide-frameless" style="display:none; margin-bottom:12px;">
                         <button class="btn btn-secondary" style="width:100%;" onclick="toggleHabitCreate()" id="btn-toggle-habit-create">+ Add New Habit</button>
                     </div>
 
-                    <div id="habit-create-area" style="display:none; background:var(--ruler-bg); padding:10px; border-radius:6px; margin-bottom:12px; flex-direction:column; gap:8px;">
+                    <div id="habit-create-area" class="habit-hide-frameless" style="display:none; background:var(--ruler-bg); padding:10px; border-radius:6px; margin-bottom:12px; flex-direction:column; gap:8px;">
                         <div class="form-row">
                             <input type="text" id="inp-new-habit" placeholder="New habit name..." style="flex:1;">
                             <button class="btn btn-primary" onclick="addTrackedHabit()">Create</button>
@@ -452,28 +510,41 @@
                     <div id="habit-list-container" style="flex:1; overflow-y:auto;"></div>
                 </div>
             </div>
-            <div style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addHabitTab()">+ New Category Tab</button></div>
+            <div id="habit-new-tab-btn-wrap" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addHabitTab()">+ New Category Tab</button></div>
         </div>
     </div>
 
     <!-- NOTES TOOL -->
     <div class="tool-window" id="tool-notes" data-def-x="250" data-def-y="180" data-def-w="550" data-def-h="400" style="top:180px; left:250px; width:550px; height:400px;">
-        <div class="drag-header" id="hdr-notes"><span>Notes</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-notes')">&times;</button></div>
+        <div class="drag-header" id="hdr-notes">
+            <span>Notes</span>
+            <div>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleTabs('notes')">Tabs</button>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-notes')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-notes')">&times;</button>
+            </div>
+        </div>
         <div class="tool-body">
             <div class="split-layout">
                 <div class="sidebar-left" id="notes-sidebar"></div>
-                <div class="content-right" style="gap:10px;">
-                    <input type="text" id="inp-note-title" placeholder="Tab Name" oninput="saveActiveNote(); document.getElementById('notes-sidebar').querySelector('.active span').innerText = this.value || 'Untitled';">
-                    <textarea id="inp-note-content" placeholder="Write notes here..." oninput="saveActiveNote()"></textarea>
+                <div class="content-right" style="gap:10px; display:flex; flex-direction:column; flex:1; overflow:hidden;">
+                    <input type="text" class="notes-hide-frameless" id="inp-note-title" placeholder="Tab Name" oninput="saveActiveNote(); document.getElementById('notes-sidebar').querySelector('.active span').innerText = this.value || 'Untitled';">
+                    <textarea id="inp-note-content" style="flex:1; resize:none; width:100%; min-height:0; box-sizing:border-box;" placeholder="Write notes here..." oninput="saveActiveNote()"></textarea>
                 </div>
             </div>
-            <div style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addNewNoteTab()">+ New Tab</button></div>
+            <div id="notes-new-tab-btn-wrap" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addNewNoteTab()">+ New Tab</button></div>
         </div>
     </div>
 
     <!-- STATISTICS TOOL -->
     <div class="tool-window" id="tool-stats" data-def-x="300" data-def-y="220" data-def-w="600" data-def-h="450" style="top:220px; left:300px; width:600px; height:450px;">
-        <div class="drag-header" id="hdr-stats"><span>Statistics</span><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-stats')">&times;</button></div>
+        <div class="drag-header" id="hdr-stats">
+            <span>Statistics</span>
+            <div>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-stats')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-stats')">&times;</button>
+            </div>
+        </div>
         <div class="tool-body">
             <div class="segmented-control" style="width: 100%;">
                 <div class="segmented-btn active" id="stat-tab-tasks" onclick="switchStatTab('tasks')">Tasks/Miles</div>
@@ -494,7 +565,11 @@
     <div class="tool-window" id="tool-notif" data-def-x="auto" data-def-y="80" data-def-w="400" data-def-h="500" style="top:80px; right:80px; left:auto; width:400px; height:500px;">
         <div class="drag-header" id="hdr-notif">
             <span>Notifications</span>
-            <div><button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleRemindersView()">Manage Reminders</button><button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-notif')">&times;</button></div>
+            <div>
+                <button class="btn btn-secondary" style="font-size: 11px; padding: 4px 8px; margin-right: 8px;" onclick="toggleRemindersView()">Manage Reminders</button>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-notif')" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-notif')">&times;</button>
+            </div>
         </div>
         <div class="tool-body" id="notif-view-alerts">
             <div id="notifications-list-container"></div>
@@ -588,7 +663,7 @@
 
     <script>
         // --- Core State & Configuration ---
-        const LOCAL_STORAGE_KEY = 'infinity_timeline_v21';
+        const LOCAL_STORAGE_KEY = 'infinity_timeline_v25';
         const PALETTE_KEY = 'infinity_palette_v4';
         const SYNC_KEY = 'infinity_sync_v1';
         
@@ -601,9 +676,12 @@
             viewCenterTime: Date.now(), pxPerMs: 0.00002, events: [],
             showTasks: true, showBackgrounds: true, showHabits: true, showFinance: true,
             todoTabs: ['Inbox', 'Done'], activeTodoTab: 'Inbox', showTodoTime: false, customTodos: [], todoEditMode: false,
+            expandedTodoNotes: {},
             habitTabs: ['Main'], activeHabitTab: 'Main', trackedHabits: [], habitCompletions: {}, activeHabitView: 'daily', habitOffset: 0, habitEditMode: false, habitCreateMode: false,
             notes: [{id: 'n1', title: 'Main Note', content: ''}], activeNoteId: 'n1', 
             notifications: [], customReminders: [], showRemindersView: false,
+            
+            showTabs: { todo: true, habits: true, notes: true, music: true },
             
             // Music Player State
             musicEmbedTabs: ['Favorites'], activeMusicEmbedTab: 'Favorites', musicEmbeds: [], musicEmbedEditMode: false,
@@ -623,7 +701,6 @@
             const r = document.documentElement; r.style.setProperty('--bg-color', activeTheme.bgColor); r.style.setProperty('--ruler-bg', activeTheme.rulerBg); r.style.setProperty('--grid-color', activeTheme.gridLines); r.style.setProperty('--text-primary', activeTheme.textPrimary); r.style.setProperty('--text-secondary', activeTheme.textSecondary); r.style.setProperty('--now-line', activeTheme.nowLine); localStorage.setItem('infinity_theme_v2', JSON.stringify(activeTheme)); render(); 
         }
 
-        // Color Palette logic
         function renderPalette() {
             const container = document.getElementById('palette-container'); container.innerHTML = '';
             userPalette.forEach((hex, idx) => {
@@ -635,7 +712,7 @@
             localStorage.setItem(PALETTE_KEY, JSON.stringify(userPalette));
         }
 
-        // --- Data Sync Engine (GitHub Gists) ---
+        // --- Data Sync Engine ---
         let syncTimeout = null;
 
         function saveSyncSettings() {
@@ -658,7 +735,6 @@
                 Object.assign(state, cloudData);
                 normalizeLoadedState();
                 
-                // Immediately update local cache to match cloud
                 localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
                 document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
                 renderAll();
@@ -701,6 +777,8 @@
             if(!state.customTodos) state.customTodos = []; if(!state.todoTabs) state.todoTabs = ['Inbox', 'Done']; if(!state.activeTodoTab) state.activeTodoTab = 'Inbox';
             if(!state.habitTabs) state.habitTabs = ['Main']; if(!state.activeHabitTab) state.activeHabitTab = 'Main'; if(!state.trackedHabits) state.trackedHabits = []; if(!state.habitCompletions) state.habitCompletions = {};
             if(!state.notes) state.notes = [{id: 'n1', title: 'Main Note', content: ''}]; if(!state.notifications) state.notifications = []; if(!state.customReminders) state.customReminders = [];
+            if(!state.expandedTodoNotes) state.expandedTodoNotes = {};
+            if(!state.showTabs) state.showTabs = { todo: true, habits: true, notes: true, music: true };
             
             if(!state.musicEmbedTabs) state.musicEmbedTabs = ['Favorites']; if(!state.activeMusicEmbedTab) state.activeMusicEmbedTab = 'Favorites'; if(!state.musicEmbeds) state.musicEmbeds = [];
             if(!state.radioTabs) state.radioTabs = ['Stations']; if(!state.activeRadioTab) state.activeRadioTab = 'Stations'; if(!state.radios) state.radios = [];
@@ -818,6 +896,12 @@
             let opts = tabs.map(t => `<option value="${t}" ${t===currentTab?'selected':''}>${t}</option>`).join('');
             return `<select class="btn btn-secondary" style="font-size:11px; padding:2px 4px; height:auto; width:80px;" onchange="${funcName}('${id}', this.value)">${opts}</select>`;
         }
+
+        window.toggleTabs = (tool) => {
+            state.showTabs[tool] = !state.showTabs[tool];
+            saveToStorage();
+            renderAll();
+        };
 
         // --- Core Rendering Engine ---
         function calculateLanes(visibleEvents) {
@@ -1017,7 +1101,7 @@
         document.getElementById('inp-duration-preset').addEventListener('change', (e) => { const customInput = document.getElementById('inp-duration-custom'); if (e.target.value === 'custom') { customInput.style.display = 'block'; customInput.focus(); } else { customInput.style.display = 'none'; } });
         document.getElementById('hidden-color-picker').addEventListener('input', (e) => { if (editingPaletteIdx > -1) { userPalette[editingPaletteIdx] = e.target.value; document.getElementById('inp-color').value = e.target.value; renderPalette(); } });
 
-        // --- Floating Tool Logic ---
+        // --- Floating Tool & Window Logic ---
         function makeDraggable(windowId, headerId) {
             const wnd = document.getElementById(windowId); const hdr = document.getElementById(headerId);
             let isDragging = false, offsetX, offsetY;
@@ -1034,6 +1118,7 @@
 
         window.openTool = (id) => { const el = document.getElementById(id); el.classList.add('active'); document.querySelectorAll('.tool-window').forEach(w => w.style.zIndex = 200); el.style.zIndex = 201; };
         window.closeTool = (id) => { document.getElementById(id).classList.remove('active'); };
+        window.toggleFrameless = (id) => { document.getElementById(id).classList.toggle('frameless'); };
         
         window.resetToolWindows = () => {
             document.querySelectorAll('.tool-window').forEach(t => {
@@ -1041,7 +1126,21 @@
                 if(t.getAttribute('data-def-x') === 'auto') t.style.right = '80px';
                 t.style.width = t.getAttribute('data-def-w') + 'px'; t.style.height = t.getAttribute('data-def-h') + 'px';
                 t.classList.remove('mini-mode-active');
+                t.classList.remove('frameless');
             });
+        };
+
+        // UI Hide Toggle
+        let uiHidden = false;
+        window.toggleUIMenus = () => {
+            uiHidden = !uiHidden;
+            document.getElementById('left-menu-list').style.display = uiHidden ? 'none' : 'flex';
+            document.getElementById('right-menu-list').style.display = uiHidden ? 'none' : 'flex';
+            document.getElementById('btn-ui-clock').style.display = uiHidden ? 'none' : 'flex';
+            document.getElementById('btn-ui-reset').style.display = uiHidden ? 'none' : 'flex';
+            document.getElementById('btn-theme-settings').style.display = uiHidden ? 'none' : 'inline-block';
+            document.getElementById('btn-ui-toggle').innerText = uiHidden ? '+' : '-';
+            document.getElementById('btn-ui-toggle').title = uiHidden ? 'Show UI Menus' : 'Hide UI Menus';
         };
 
         // --- Music Player Logic ---
@@ -1056,9 +1155,11 @@
             const wnd = document.getElementById('tool-music');
             wnd.classList.toggle('mini-mode-active');
             if (wnd.classList.contains('mini-mode-active')) {
-                wnd.style.width = '350px'; wnd.style.height = 'auto'; wnd.style.minHeight = '150px';
+                wnd.style.width = ''; wnd.style.height = ''; wnd.style.minHeight = '';
             } else {
-                wnd.style.width = '650px'; wnd.style.height = '460px'; wnd.style.minHeight = '250px';
+                wnd.style.width = wnd.getAttribute('data-def-w') + 'px';
+                wnd.style.height = wnd.getAttribute('data-def-h') + 'px';
+                wnd.style.minHeight = '250px';
             }
         };
 
@@ -1171,6 +1272,11 @@
                 }
                 radC.appendChild(item);
             });
+            
+            document.getElementById('embed-sidebar').style.display = state.showTabs.music ? 'flex' : 'none';
+            document.getElementById('radio-sidebar').style.display = state.showTabs.music ? 'flex' : 'none';
+            document.getElementById('music-new-embed-tab-wrap').style.display = state.showTabs.music ? 'block' : 'none';
+            document.getElementById('music-new-radio-tab-wrap').style.display = state.showTabs.music ? 'block' : 'none';
         }
 
         // Local Files Player Logic
@@ -1212,14 +1318,21 @@
             const repeats = parseInt(document.getElementById('pomo-repeat').value) || 1; const seq = document.getElementById('pomo-sequence'); let html = '';
             for(let i=0; i<repeats; i++) {
                 let activeS = (timers.pomo.state === 'running' || timers.pomo.state === 'paused') && timers.pomo.phase === i*2;
-                html += `<div style="width:30px; height:30px; border-radius:6px; background:${activeS?'var(--accent-color)':'var(--grid-color)'}; display:flex; align-items:center; justify-content:center; font-size:16px;">🍅</div>`;
+                html += `<div style="width:30px; height:30px; border-radius:6px; background:${activeS?'var(--accent-color)':'var(--grid-color)'}; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer;" onclick="jumpPomodoro(${i*2})" title="Skip to Session ${i+1}">🍅</div>`;
                 if (i < repeats - 1) {
                     let activeB = (timers.pomo.state === 'running' || timers.pomo.state === 'paused') && timers.pomo.phase === i*2 + 1;
-                    html += `<div style="width:30px; height:30px; border-radius:6px; background:${activeB?'var(--accent-color)':'var(--grid-color)'}; display:flex; align-items:center; justify-content:center; font-size:16px;">☕</div>`;
+                    html += `<div style="width:30px; height:30px; border-radius:6px; background:${activeB?'var(--accent-color)':'var(--grid-color)'}; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer;" onclick="jumpPomodoro(${i*2 + 1})" title="Skip to Break ${i+1}">☕</div>`;
                 }
             }
             let activeF = (timers.pomo.state === 'running' || timers.pomo.state === 'paused') && timers.pomo.phase >= repeats*2 - 1;
             html += `<div style="width:30px; height:30px; border-radius:6px; background:${activeF?'var(--accent-color)':'var(--grid-color)'}; display:flex; align-items:center; justify-content:center; font-size:16px;">⭐</div>`; seq.innerHTML = html;
+        };
+        
+        window.jumpPomodoro = (phase) => {
+            if(timers.pomo.state === 'idle' || phase >= timers.pomo.phases.length) return;
+            timers.pomo.phase = phase;
+            timers.pomo.timeLeft = timers.pomo.phases[phase];
+            updatePomoUI();
         };
         
         window.togglePomodoro = () => {
@@ -1263,6 +1376,8 @@
         window.addTodoTab = () => { const t = prompt("New Tab Name:"); if(t && !state.todoTabs.includes(t)) { state.todoTabs.push(t); state.activeTodoTab = t; saveToStorage(); renderTodos(); } };
         window.deleteTodoTab = (tab) => { if(confirm(`Delete tab '${tab}' and all items?`)) { state.todoTabs = state.todoTabs.filter(t=>t!==tab); state.customTodos = state.customTodos.filter(c=>c.tab!==tab); state.events.forEach(e=>{if(e.todoTab===tab) e.inTodoList=false;}); state.activeTodoTab = state.todoTabs[0] || 'Inbox'; saveToStorage(); renderTodos(); }};
         window.toggleTodoEdit = () => { state.todoEditMode = !state.todoEditMode; renderTodos(); };
+        window.toggleCustomTodoNote = (id) => { state.expandedTodoNotes[id] = !state.expandedTodoNotes[id]; renderTodos(); };
+        window.updateCustomTodoNote = (id, val) => { const t = state.customTodos.find(x=>x.id===id); if(t) { t.note = val; saveToStorage(); renderTodos(); } };
         
         window.moveTodo = (id, newTab, isTimeline) => { if(isTimeline) { const e = state.events.find(x=>x.id===id); if(e) e.todoTab = newTab; } else { const t = state.customTodos.find(x=>x.id===id); if(t) t.tab = newTab; } saveToStorage(); renderTodos(); };
         window.reorderCustomTodo = (id, dir) => { const arr = state.customTodos; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderTodos(); } } };
@@ -1277,16 +1392,45 @@
             const c = document.getElementById('todo-list-container'); c.innerHTML = '';
             state.events.filter(e => e.inTodoList && e.todoTab === state.activeTodoTab).forEach(ev => {
                 const timeStr = state.showTodoTime ? `<span style="font-size:10px; color:var(--text-secondary); margin-left:6px;">${new Date(ev.start).toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})}</span>` : '';
-                const item = document.createElement('div'); item.className = `list-item ${ev.todoCompleted ? 'completed' : ''}`;
+                const item = document.createElement('div'); item.className = `list-item ${ev.todoCompleted ? 'completed' : ''}`; item.style.flexWrap = 'wrap';
                 let controls = state.todoEditMode ? `<div class="right">${getGenericMoveDropdownHTML(state.todoTabs, ev.todoTab, 'moveTodoTimeline', ev.id)}</div>` : '';
-                item.innerHTML = `<div class="left"><input type="checkbox" ${ev.todoCompleted?'checked':''} onchange="toggleEventTodo('${ev.id}', this.checked)"><span class="task-title">${ev.title}${timeStr}</span></div>${controls}`; c.appendChild(item);
+                
+                const hasNote = ev.notes && ev.notes.trim() !== '';
+                const btnStyle = hasNote ? '' : 'background:transparent; border:none; box-shadow:none; padding:2px;';
+                const btnClass = hasNote ? 'btn btn-secondary' : 'btn';
+
+                item.innerHTML = `
+                    <div class="left"><input type="checkbox" ${ev.todoCompleted?'checked':''} onchange="toggleEventTodo('${ev.id}', this.checked)"><span class="task-title">${ev.title}${timeStr}</span></div>
+                    <div class="right">
+                        <button class="${btnClass}" style="padding:2px 6px; font-size:12px; ${btnStyle}" onclick="openModal(state.events.find(x=>x.id==='${ev.id}'))" title="Edit on Timeline">📝</button>
+                        ${controls}
+                    </div>
+                `; 
+                c.appendChild(item);
             });
             state.customTodos.filter(ct => ct.tab === state.activeTodoTab).forEach(ct => {
-                const item = document.createElement('div'); item.className = `list-item ${ct.completed ? 'completed' : ''}`;
+                const item = document.createElement('div'); item.className = `list-item ${ct.completed ? 'completed' : ''}`; item.style.flexWrap = 'wrap';
                 let controls = state.todoEditMode ? `<div class="right"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderCustomTodo('${ct.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.todoTabs, ct.tab, 'moveCustomTodo', ct.id)}<button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>` : `<div class="right"><button class="close-btn" style="font-size:14px" onclick="deleteCustomTodo('${ct.id}')">&times;</button></div>`;
-                item.innerHTML = `<div class="left"><input type="checkbox" ${ct.completed?'checked':''} onchange="toggleCustomTodo('${ct.id}', this.checked)"><span class="task-title">${ct.title}</span></div>${controls}`; c.appendChild(item);
+                
+                const hasNote = ct.note && ct.note.trim() !== '';
+                const btnStyle = hasNote ? '' : 'background:transparent; border:none; box-shadow:none; padding:2px;';
+                const btnClass = hasNote ? 'btn btn-secondary' : 'btn';
+
+                item.innerHTML = `
+                    <div class="left"><input type="checkbox" ${ct.completed?'checked':''} onchange="toggleCustomTodo('${ct.id}', this.checked)"><span class="task-title">${ct.title}</span></div>
+                    <div class="right">
+                        <button class="${btnClass}" style="padding:2px 6px; font-size:12px; ${btnStyle}" onclick="toggleCustomTodoNote('${ct.id}')" title="Add/Toggle Note">📝</button>
+                        ${controls}
+                    </div>
+                    <div style="width:100%; display:${state.expandedTodoNotes[ct.id] ? 'block' : 'none'}; margin-top:8px;">
+                        <textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateCustomTodoNote('${ct.id}', this.value)" placeholder="Add a note...">${ct.note || ''}</textarea>
+                    </div>
+                `; 
+                c.appendChild(item);
             });
             document.getElementById('inp-show-time').checked = state.showTodoTime;
+            document.getElementById('todo-sidebar').style.display = state.showTabs.todo ? 'flex' : 'none';
+            document.getElementById('todo-new-tab-btn-wrap').style.display = state.showTabs.todo ? 'block' : 'none';
         }
 
         window.moveTodoTimeline = (id, tab) => moveTodo(id, tab, true);
@@ -1381,6 +1525,9 @@
                 });
             }
             document.getElementById('habit-period-label').innerText = periodLabel;
+            
+            document.getElementById('habit-sidebar').style.display = state.showTabs.habits ? 'flex' : 'none';
+            document.getElementById('habit-new-tab-btn-wrap').style.display = state.showTabs.habits ? 'block' : 'none';
         }
 
         window.toggleHabitComp = (id, period, val) => { if(!state.habitCompletions[id]) state.habitCompletions[id] = []; if(val) state.habitCompletions[id].push(period); else state.habitCompletions[id] = state.habitCompletions[id].filter(p => p !== period); saveToStorage(); renderHabitTracker(); };
@@ -1405,6 +1552,9 @@
             });
             const act = state.notes.find(n => n.id === state.activeNoteId) || state.notes[0];
             if(act) { document.getElementById('inp-note-title').value = act.title; document.getElementById('inp-note-content').value = act.content; }
+            
+            document.getElementById('notes-sidebar').style.display = state.showTabs.notes ? 'flex' : 'none';
+            document.getElementById('notes-new-tab-btn-wrap').style.display = state.showTabs.notes ? 'block' : 'none';
         }
         window.saveActiveNote = () => { const act = state.notes.find(n => n.id === state.activeNoteId); if(act) { act.title = document.getElementById('inp-note-title').value; act.content = document.getElementById('inp-note-content').value; saveToStorage(); } };
         window.addNewNoteTab = () => { saveActiveNote(); const id = 'n_'+Date.now(); state.notes.push({id, title: 'New Tab', content: ''}); state.activeNoteId = id; saveToStorage(); renderNotes(); };
@@ -1677,6 +1827,7 @@
             anim();
         });
 
+        // Toggle UI Triggers
         document.getElementById('btn-toggle-tasks').addEventListener('click', (e) => { state.showTasks = !state.showTasks; e.target.innerText = state.showTasks ? 'Hide Tasks/Milestones' : 'Show Tasks/Milestones'; render(); });
         document.getElementById('btn-toggle-habits').addEventListener('click', (e) => { state.showHabits = !state.showHabits; e.target.innerText = state.showHabits ? 'Hide Timeline Habits' : 'Show Timeline Habits'; render(); });
         document.getElementById('btn-toggle-finance').addEventListener('click', (e) => { state.showFinance = !state.showFinance; e.target.innerText = state.showFinance ? 'Hide Finance' : 'Show Finance'; render(); });
