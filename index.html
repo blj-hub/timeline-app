@@ -58,6 +58,7 @@
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: var(--text-primary); font-size: 12px; font-weight: 600;
             white-space: nowrap; text-shadow: 0 2px 4px var(--bg-color); 
         }
+		.event.all-day, .event.birthday { height: 16px !important; font-size: 11px; padding: 0 6px; }
 
         #now-line { position: absolute; top: 0; width: 2px; height: 100%; background-color: var(--now-line); z-index: 3; pointer-events: none; }
         #now-line::after { content: 'NOW'; position: absolute; top: 15px; left: 6px; color: var(--now-line); font-size: 11px; font-weight: bold; }
@@ -98,7 +99,7 @@
         .btn-danger { background: transparent; color: #ef4444; border: 1px solid #ef4444; }
         .btn-secondary { background: var(--grid-color); color: var(--text-primary); border: 1px solid var(--modal-border); }
         
-        .segmented-control { display: flex; background: var(--input-bg); border-radius: 6px; border: 1px solid var(--input-border); overflow: hidden; }
+        .segmented-control { display: flex; background: var(--input-bg); border-radius: 6px; border: 1px solid var(--input-border); overflow: hidden; flex-shrink: 0; }
         .segmented-btn { flex: 1; padding: 6px; text-align: center; font-size: 12px; cursor: pointer; color: var(--text-secondary); transition: 0.1s; }
         .segmented-btn.active { background: var(--accent-color); color: #fff; }
 
@@ -246,6 +247,7 @@
                 <div class="btn-row">
                     <button class="floating-btn secondary" id="btn-toggle-tasks">Hide Tasks/Milestones</button>
                     <button class="floating-btn secondary" id="btn-toggle-bgs">Hide Backgrounds</button>
+                    <button class="floating-btn secondary" id="btn-toggle-birthdays">Hide Birthdays</button>
                 </div>
                 <div class="btn-row">
                     <button class="floating-btn secondary" id="btn-toggle-habits">Hide Habits</button>
@@ -371,9 +373,10 @@
         </div>
         <div class="tool-body">
             <div class="frameless-title" id="todo-frameless-title"></div>
-            <div class="segmented-control hide-frameless" style="margin-bottom:10px;">
+			<div class="segmented-control hide-frameless" style="margin-bottom:10px;">
                 <div class="segmented-btn active" id="todo-tab-main" onclick="switchTodoAppView('todo')">Todo List</div>
                 <div class="segmented-btn" id="todo-tab-lists" onclick="switchTodoAppView('lists')">Lists</div>
+                <div class="segmented-btn" id="todo-tab-birthdays" onclick="switchTodoAppView('birthdays')">Birthdays</div>
             </div>
             <div id="view-todo-main" style="display:flex; flex-direction:column; flex:1;">
                 <div class="split-layout">
@@ -405,6 +408,14 @@
                     </div>
                 </div>
                 <div id="lists-new-tab-btn-wrap" style="margin-top: 10px;" class="hide-frameless"><button class="btn btn-secondary" onclick="addListTab()">+ New Tab</button></div>
+            </div>
+			<div id="view-todo-birthdays" style="display:none; flex-direction:column; flex:1;">
+                <div class="form-row hide-frameless">
+                    <input type="date" id="inp-new-bday-date" style="flex:1;">
+                    <input type="text" id="inp-new-bday-name" placeholder="Person's Name..." style="flex:2;">
+                    <button class="btn btn-primary" onclick="addBirthdayQuick()">Add</button>
+                </div>
+                <div id="birthdays-list-container" style="flex:1; overflow-y:auto; padding-right:5px; display:flex; flex-direction:column; gap:6px; margin-top: 10px;"></div>
             </div>
         </div>
     </div>
@@ -597,7 +608,17 @@
                 <div class="form-row">
                     <div class="form-group" style="flex: 1;">
                         <label>Type</label>
-                        <select id="inp-type"><option value="event">Task</option><option value="milestone">Milestone</option><option value="project_task">Project Task</option><option value="project_milestone">Project Milestone</option><option value="habit">Timeline Habit</option><option value="finance">Finance</option><option value="background">Background Block</option></select>
+					<select id="inp-type">
+                            <option value="event">Task</option>
+							<option value="allday">All-Day Event</option>
+                            <option value="birthday">Birthday</option>
+                            <option value="milestone">Milestone</option>
+                            <option value="project_task">Project Task</option>
+                            <option value="project_milestone">Project Milestone</option>
+                            <option value="habit">Timeline Habit</option>
+                            <option value="finance">Finance</option>
+                            <option value="background">Background Block</option>
+                        </select>
                     </div>
                     <div class="form-group" style="flex: 1.5;"><label>Color (Dbl-click to edit)</label><div style="display: flex; gap: 12px;"><input type="color" id="inp-color" value="#3b82f6" style="width: 40px; padding: 0; flex-shrink: 0;"><div class="palette-container" id="palette-container"></div></div></div>
                 </div>
@@ -619,7 +640,7 @@
                 <div class="form-row" id="wrapper-extras" style="margin-top: 8px;"><div class="form-group" style="flex-direction:row; align-items:center; gap:8px;"><input type="checkbox" id="inp-in-todo"> <label style="margin:0;">Add to Todo List</label></div><div class="form-group"><label>Reminders (e.g. 1d, 8h, 30m)</label><input type="text" id="inp-reminders" placeholder="e.g. 1d, 8h, 1h 30m"></div></div>
 
                 <div class="form-row" id="wrapper-opacity-zindex" style="margin-top: 8px;"><div class="form-group"><label>Fill Opacity</label><select id="inp-opacity" style="width: 100%;"><option value="1">100% (Solid)</option><option value="0.9">90%</option><option value="0.8">80%</option><option value="0.7">70%</option><option value="0.6">60%</option><option value="0.5">50%</option><option value="0.4">40%</option><option value="0.3">30%</option><option value="0.2">20%</option><option value="0.15">15%</option><option value="0.1">10%</option></select></div><div class="form-group" id="wrapper-bg-advanced" style="display: none;"><label>Layer</label><input type="number" id="inp-zindex" value="0" style="width: 100%;"></div></div>
-                <div class="form-group"><label>Notes</label><textarea id="inp-notes" rows="2"></textarea></div>
+                <div class="form-group"><label>Notes</label><textarea id="inp-notes" rows="2" style="resize: vertical;"></textarea></div>
             </div>
             <div class="modal-footer"><button class="btn btn-danger" id="btn-delete">Delete</button><button class="btn btn-primary" id="btn-save">Save Changes</button></div>
         </div>
@@ -711,7 +732,7 @@
 
         const state = {
             viewCenterTime: Date.now(), pxPerMs: 0.00002, events: [],
-            showTasks: true, showBackgrounds: true, showHabits: true, showFinance: true, showProjects: true,
+			showTasks: true, showBackgrounds: true, showHabits: true, showFinance: true, showProjects: true, showBirthdays: true,
             showNowLine: true,
             
             // Todo & Lists State
@@ -1057,22 +1078,41 @@
             return `<select class="btn btn-secondary" style="font-size:11px; padding:2px 4px; height:auto; width:80px; margin-left:4px;" onchange="${funcName}('${id}', this.value)">${opts}</select>`;
         }
 
-        // --- Core Rendering Engine ---
-        function calculateLanes(visibleEvents) {
+			function calculateLanes(visibleEvents) {
             const sortedEvents = [...visibleEvents].sort((a, b) => a.start - b.start);
             const lanes = [];
             sortedEvents.forEach(event => {
                 let placed = false;
-                for (let i = 0; i < lanes.length; i++) { if (lanes[i] <= event.start - (10 / state.pxPerMs)) { event.lane = i; lanes[i] = event.end; placed = true; break; } }
+                // Remove the mandatory padding gap for all-day and birthday events
+                const gap = (event.type === 'allday' || event.type === 'birthday') ? 0 : (10 / state.pxPerMs);
+                for (let i = 0; i < lanes.length; i++) { if (lanes[i] <= event.start - gap) { event.lane = i; lanes[i] = event.end; placed = true; break; } }
                 if (!placed) { event.lane = lanes.length; lanes.push(event.end); }
             });
         }
 
-        function render() {
+		function render() {
             ctx.clearRect(0, 0, canvas.width, canvas.height); drawTimelineAxis(); drawBackgroundBlocks(); 
-            const domEvents = state.events.filter(e => e.type !== 'background');
+            
+            const domEvents = [];
+            const viewYear = new Date(state.viewCenterTime).getFullYear();
+            
+            state.events.filter(e => e.type !== 'background').forEach(e => {
+                if (e.type === 'birthday') {
+                    if (!state.showBirthdays) return;
+                    const bDate = new Date(e.start);
+                    const bMonth = bDate.getMonth(); const bDay = bDate.getDate();
+                    // Generate instances for surrounding years
+                    for (let y = viewYear - 2; y <= viewYear + 2; y++) {
+                        const instanceStart = new Date(y, bMonth, bDay).getTime();
+                        domEvents.push({ ...e, id: e.id + '_inst_' + y, start: instanceStart, end: instanceStart + 86400000, title: `🎂 ${e.title} (${y - bDate.getFullYear()})`, originalId: e.id });
+                    }
+                } else {
+                    domEvents.push(e);
+                }
+            });
+
             const visibleEvents = domEvents.filter(e => {
-                if ((e.type === 'event' || e.type === 'milestone') && !state.showTasks) return false;
+                if ((e.type === 'event' || e.type === 'milestone' || e.type === 'allday') && !state.showTasks) return false;
                 if ((e.type === 'project_task' || e.type === 'project_milestone') && !state.showProjects) return false;
                 if (e.type === 'habit' && !state.showHabits) return false;
                 if (e.type === 'finance' && !state.showFinance) return false;
@@ -1083,11 +1123,7 @@
             const nowX = timeToX(Date.now()); 
             nowLine.style.transform = `translateX(${nowX}px)`; 
             
-            if (!state.showNowLine) {
-                nowLine.style.display = 'none';
-            } else {
-                nowLine.style.display = (nowX < -10 || nowX > canvas.width + 10) ? 'none' : 'block';
-            }
+            if (!state.showNowLine) { nowLine.style.display = 'none'; } else { nowLine.style.display = (nowX < -10 || nowX > canvas.width + 10) ? 'none' : 'block'; }
         }
 
         function drawTimelineAxis() {
@@ -1175,14 +1211,15 @@
             });
         }
 
-        function updateDOMEvents(visibleEvents) {
+			function updateDOMEvents(visibleEvents) {
             eventsContainer.innerHTML = ''; 
             visibleEvents.forEach(event => {
                 const startX = timeToX(event.start), endX = timeToX(event.end);
                 if (endX < -200 || startX > canvas.width + 200) return;
                 const isMilestoneOrFinance = event.type === 'milestone' || event.type === 'finance' || event.type === 'project_milestone';
                 const el = document.createElement('div'); 
-                el.className = `event ${(event.type === 'milestone' || event.type === 'project_milestone') ? 'milestone' : ''} ${event.type === 'finance' ? 'finance' : ''}`;
+                
+                el.className = `event ${(event.type === 'milestone' || event.type === 'project_milestone') ? 'milestone' : ''} ${event.type === 'finance' ? 'finance' : ''} ${(event.type === 'allday' || event.type === 'birthday') ? 'all-day' : ''}`;
                 
                 const color = event.color || '#3b82f6'; const finalOpacity = event.opacity !== undefined ? parseFloat(event.opacity) : (isMilestoneOrFinance ? 1.0 : 0.2);
                 
@@ -1192,13 +1229,23 @@
                     let label = event.title; if(event.type === 'finance') label = `${event.financeType === 'earning'?'+':'-'}€${event.amount || 0} ` + label; el.innerHTML = `<span>${label}</span>`;
                 } else {
                     el.style.borderColor = color; el.style.backgroundColor = hexToRgba(color, finalOpacity);
-                    el.style.left = `${startX}px`; el.style.width = `${Math.max(endX - startX, 6)}px`; el.style.top = `${config.paddingTop + (event.lane * config.laneHeight)}px`;
+                    el.style.left = `${startX}px`; 
+                    
+                    // Subtract 2px from the visual width of all-day events so adjoining days don't look like a single merged block
+                    const visualWidth = (event.type === 'allday' || event.type === 'birthday') ? Math.max(endX - startX - 2, 6) : Math.max(endX - startX, 6);
+                    el.style.width = `${visualWidth}px`; 
+                    
+                    el.style.top = `${config.paddingTop + (event.lane * config.laneHeight)}px`;
                     el.innerHTML = `<span style="pointer-events:none">${event.title}</span>`;
-                    const handle = document.createElement('div'); handle.className = 'resize-handle';
-                    handle.addEventListener('pointerdown', (e) => { e.stopPropagation(); state.resizingEvent = event; state.hasDragged = false; state.dragStartX = e.clientX; state.dragStartEnd = event.end; el.classList.add('resizing'); });
-                    el.appendChild(handle);
+                    
+                    if (event.type !== 'birthday') {
+                        const handle = document.createElement('div'); handle.className = 'resize-handle';
+                        handle.addEventListener('pointerdown', (e) => { e.stopPropagation(); state.resizingEvent = event; state.hasDragged = false; state.dragStartX = e.clientX; state.dragStartEnd = event.end; el.classList.add('resizing'); });
+                        el.appendChild(handle);
+                    }
                 }
                 el.addEventListener('pointerdown', (e) => {
+                    if (event.type === 'birthday') { e.stopPropagation(); if(state.resizingEvent) return; openModal(state.events.find(x => x.id === event.originalId)); return; }
                     e.stopPropagation(); if (state.resizingEvent) return; 
                     state.draggingEvent = event; state.hasDragged = false; state.dragStartX = e.clientX; state.dragStartTime = event.start; state.dragDuration = event.end - event.start; el.classList.add('dragging');
                 });
@@ -1208,13 +1255,39 @@
 
         window.updateEventTitle = (id, val) => { const e = state.events.find(x=>x.id===id); if(e) { e.title = val; saveToStorage(); renderTodos(); renderProjects(); render(); } };
 
+// Helper specifically for all-day dates
+        function formatDateForInput(ms) { const d = new Date(ms); return new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 10); }
+
         // --- Event Modals ---
         const inpType = document.getElementById('inp-type');
         inpType.addEventListener('change', (e) => {
             const type = e.target.value;
-            document.getElementById('wrapper-finance').style.display = type === 'finance' ? 'block' : 'none'; document.getElementById('wrapper-extras').style.display = type === 'background' ? 'none' : 'flex';
-            if (type === 'background') { document.getElementById('wrapper-bg-mode').style.display = 'block'; document.getElementById('wrapper-bg-advanced').style.display = 'flex'; if (state.modalBgMode === 'repeating') document.getElementById('btn-bg-repeating').click(); else document.getElementById('btn-bg-oneoff').click(); } 
-            else { document.getElementById('wrapper-bg-mode').style.display = 'none'; document.getElementById('wrapper-bg-advanced').style.display = 'none'; document.getElementById('wrapper-standard-fields').style.display = 'block'; document.getElementById('wrapper-repeating-fields').style.display = 'none'; document.getElementById('group-end-mode').style.display = (type === 'milestone' || type === 'finance' || type === 'project_milestone') ? 'none' : 'block'; }
+            const isAllDay = type === 'allday' || type === 'birthday';
+            
+            document.getElementById('wrapper-finance').style.display = type === 'finance' ? 'block' : 'none'; 
+            document.getElementById('wrapper-extras').style.display = type === 'background' ? 'none' : 'flex';
+            
+            if (type === 'background') { 
+                document.getElementById('wrapper-bg-mode').style.display = 'block'; document.getElementById('wrapper-bg-advanced').style.display = 'flex'; 
+                if (state.modalBgMode === 'repeating') document.getElementById('btn-bg-repeating').click(); else document.getElementById('btn-bg-oneoff').click(); 
+            } else { 
+                document.getElementById('wrapper-bg-mode').style.display = 'none'; document.getElementById('wrapper-bg-advanced').style.display = 'none'; 
+                document.getElementById('wrapper-standard-fields').style.display = 'block'; document.getElementById('wrapper-repeating-fields').style.display = 'none'; 
+                document.getElementById('group-end-mode').style.display = (type === 'milestone' || type === 'finance' || type === 'project_milestone' || type === 'birthday') ? 'none' : 'block';
+            }
+            
+            // Switch inputs to dates if all-day, otherwise datetime
+            const inpStart = document.getElementById('inp-start');
+            const inpEnd = document.getElementById('inp-end');
+            const presetSel = document.getElementById('inp-duration-preset');
+            
+            if (isAllDay) {
+                inpStart.type = 'date'; inpEnd.type = 'date';
+                presetSel.innerHTML = `<option value="86400000">1 day</option><option value="172800000">2 days</option><option value="259200000">3 days</option><option value="345600000">4 days</option><option value="432000000">5 days</option><option value="518400000">6 days</option><option value="604800000">1 week</option><option value="custom">Custom...</option>`;
+            } else {
+                inpStart.type = 'datetime-local'; inpEnd.type = 'datetime-local';
+                presetSel.innerHTML = `<option value="900000">15 minutes</option><option value="1800000">30 minutes</option><option value="3600000">1 hour</option><option value="7200000">2 hours</option><option value="14400000">4 hours</option><option value="28800000">8 hours</option><option value="86400000">1 day</option><option value="172800000">2 days</option><option value="432000000">5 days</option><option value="604800000">1 week</option><option value="custom">Custom...</option>`;
+            }
             
             const isProj = type === 'project_task' || type === 'project_milestone';
             document.getElementById('wrapper-project').style.display = isProj ? 'flex' : 'none';
@@ -1240,8 +1313,17 @@
                     const checkboxes = document.querySelectorAll('.inp-bg-day'); checkboxes.forEach(cb => cb.checked = (event.daysOfWeek || []).includes(parseInt(cb.value)));
                 }
             }
+            
+            // Format time inputs dynamically based on type
+            inpType.dispatchEvent(new Event('change')); // Dispatch early to setup input types
             if (event.type !== 'background' || event.bgMode === 'one-off') {
-                document.getElementById('inp-start').value = formatDatetimeForInput(event.start); document.getElementById('inp-end').value = formatDatetimeForInput(event.end || event.start + 3600000);
+                if(event.type === 'allday' || event.type === 'birthday') {
+                    document.getElementById('inp-start').value = formatDateForInput(event.start); 
+                    document.getElementById('inp-end').value = formatDateForInput(event.end || event.start + 86400000);
+                } else {
+                    document.getElementById('inp-start').value = formatDatetimeForInput(event.start); 
+                    document.getElementById('inp-end').value = formatDatetimeForInput(event.end || event.start + 3600000);
+                }
                 const diffMs = (event.end || event.start + 3600000) - event.start; const presetSelect = document.getElementById('inp-duration-preset'); const customInput = document.getElementById('inp-duration-custom');
                 let foundPreset = false;
                 for (let option of presetSelect.options) { if (option.value === diffMs.toString()) { presetSelect.value = diffMs.toString(); customInput.style.display = 'none'; foundPreset = true; break; } }
@@ -1256,7 +1338,7 @@
                 document.getElementById('inp-project-cat').value = event.projectCat || (state.projectCategories[pTabSel.value] && state.projectCategories[pTabSel.value][0]);
             }
 
-            inpType.dispatchEvent(new Event('change')); document.getElementById('modal-task').classList.add('active'); modalOverlay.classList.add('active');
+            document.getElementById('modal-task').classList.add('active'); modalOverlay.classList.add('active');
         }
         function closeModal() { document.querySelectorAll('.modal-window').forEach(m => m.classList.remove('active')); modalOverlay.classList.remove('active'); state.activeEventId = null; }
 
@@ -1278,9 +1360,28 @@
                     updatedData.bgMode = 'repeating'; updatedData.startTime = document.getElementById('inp-bg-start').value; updatedData.endTime = document.getElementById('inp-bg-end').value;
                     const days = []; document.querySelectorAll('.inp-bg-day:checked').forEach(cb => days.push(parseInt(cb.value))); updatedData.daysOfWeek = days;
                 } else {
-                    const sT = new Date(document.getElementById('inp-start').value).getTime() || Date.now(); let eT = sT;
-                    if (type !== 'milestone' && type !== 'finance' && type !== 'project_milestone') { if (state.modalEndMode === 'duration') { const preset = document.getElementById('inp-duration-preset').value; eT = sT + (preset === 'custom' ? parseDurationStr(document.getElementById('inp-duration-custom').value) : parseInt(preset)); } else { eT = new Date(document.getElementById('inp-end').value).getTime(); } }
-                    if (!eT || eT <= sT) eT = sT + 3600000;
+                    let sT, eT;
+                    if (type === 'allday' || type === 'birthday') {
+                        // Safe timezone math for local midnight dates
+                        const [y, m, d] = document.getElementById('inp-start').value.split('-');
+                        sT = new Date(y, m - 1, d).getTime() || Date.now();
+                        if (state.modalEndMode === 'duration') {
+                            const preset = document.getElementById('inp-duration-preset').value; 
+                            eT = sT + (preset === 'custom' ? parseDurationStr(document.getElementById('inp-duration-custom').value) : parseInt(preset)); 
+                        } else {
+                            const [ey, em, ed] = document.getElementById('inp-end').value.split('-');
+                            eT = new Date(ey, em - 1, ed).getTime();
+                        }
+                    } else {
+                        sT = new Date(document.getElementById('inp-start').value).getTime() || Date.now(); eT = sT;
+                        if (type !== 'milestone' && type !== 'finance' && type !== 'project_milestone') { 
+                            if (state.modalEndMode === 'duration') { 
+                                const preset = document.getElementById('inp-duration-preset').value; 
+                                eT = sT + (preset === 'custom' ? parseDurationStr(document.getElementById('inp-duration-custom').value) : parseInt(preset)); 
+                            } else { eT = new Date(document.getElementById('inp-end').value).getTime(); } 
+                        }
+                    }
+                    if (!eT || eT <= sT) eT = sT + (type === 'allday' ? 86400000 : 3600000);
                     updatedData.bgMode = type === 'background' ? 'one-off' : undefined; updatedData.start = sT; updatedData.end = eT;
                 }
                 if(type === 'finance') { updatedData.amount = parseFloat(document.getElementById('inp-amount').value) || 0; updatedData.financeType = state.financeTypeModal; }
@@ -1800,12 +1901,14 @@
 
 
         // --- Todo & Lists Tool ---
-        window.switchTodoAppView = (view) => {
+			window.switchTodoAppView = (view) => {
             state.activeTodoView = view;
             document.getElementById('todo-tab-main').classList.toggle('active', view === 'todo');
             document.getElementById('todo-tab-lists').classList.toggle('active', view === 'lists');
+            document.getElementById('todo-tab-birthdays').classList.toggle('active', view === 'birthdays');
             document.getElementById('view-todo-main').style.display = view === 'todo' ? 'flex' : 'none';
             document.getElementById('view-todo-lists').style.display = view === 'lists' ? 'flex' : 'none';
+            document.getElementById('view-todo-birthdays').style.display = view === 'birthdays' ? 'flex' : 'none';
             renderTodos();
         };
 
@@ -1858,11 +1961,47 @@
             document.getElementById('inp-new-todo').value = ''; document.getElementById('todo-item-url').value = '';
         };
 
-        function renderTodos() {
+		window.addBirthdayQuick = () => {
+            const dateVal = document.getElementById('inp-new-bday-date').value;
+            const nameVal = document.getElementById('inp-new-bday-name').value;
+            if(!dateVal || !nameVal) return;
+            const [y, m, d] = dateVal.split('-'); const sT = new Date(y, m - 1, d).getTime();
+            const evt = { id: 'evt_' + Date.now(), title: nameVal, start: sT, end: sT + 86400000, type: 'birthday', color: '#f59e0b', notes: '', order: Date.now() };
+            state.events.push(evt); saveToStorage(); render(); renderTodos();
+            document.getElementById('inp-new-bday-name').value = '';
+        };
+
+        window.deleteBirthday = (id) => { if(confirm("Delete this birthday?")) { state.events = state.events.filter(e => e.id !== id); saveToStorage(); render(); renderTodos(); } };
+
+       function renderTodos() {
             if(state.activeTodoView === 'todo') {
                 document.getElementById('todo-frameless-title').innerText = `Todo List - ${state.activeTodoTab}`;
-            } else {
+            } else if (state.activeTodoView === 'lists') {
                 document.getElementById('todo-frameless-title').innerText = `List - ${state.activeListTab}`;
+            } else {
+                document.getElementById('todo-frameless-title').innerText = `Birthdays`;
+                const bC = document.getElementById('birthdays-list-container'); bC.innerHTML = '';
+                const today = new Date(); today.setHours(0,0,0,0); const currentY = today.getFullYear();
+                
+                let bDays = state.events.filter(e => e.type === 'birthday').map(e => {
+                    const d = new Date(e.start); let nextDate = new Date(currentY, d.getMonth(), d.getDate());
+                    if (nextDate < today) nextDate.setFullYear(currentY + 1);
+                    return { ...e, nextDate, diff: nextDate.getTime() - today.getTime(), age: nextDate.getFullYear() - d.getFullYear() };
+                });
+                
+                bDays.sort((a,b) => a.diff - b.diff);
+bDays.forEach(b => {
+                    const div = document.createElement('div'); div.className = 'list-item';
+                    
+                    // Added Edit Button Logic
+                    const editBtn = `<button class="btn" style="padding:2px 6px; font-size:12px; background:transparent; border:none; box-shadow:none; color:var(--text-secondary); opacity:0.6;" onclick="openModal(state.events.find(x=>x.id==='${b.id}'))" title="Edit on Timeline">📝</button>`;
+                    const controls = state.todoEditMode ? `<div class="right">${editBtn}<button class="close-btn" style="font-size:14px" onclick="deleteBirthday('${b.id}')">&times;</button></div>` : `<div class="right">${editBtn}</div>`;
+                    
+                    const dateStr = b.nextDate.toLocaleDateString(undefined, {month:'short', day:'numeric'});
+                    div.innerHTML = `<div class="left"><span style="font-size:16px;">🎂</span><span class="task-title" style="margin-left:6px;"><b>${b.title}</b> turns ${b.age} on ${dateStr}</span></div>${controls}`;
+                    bC.appendChild(div);
+                });
+                return; // Exit early, no need to render the rest of the lists
             }
 
             // Render Todo View
@@ -2401,7 +2540,7 @@
             }
 
             let filtered = state.events.filter(e => e.start >= range.start && e.start <= range.end);
-            if (tab === 'tasks') filtered = filtered.filter(e => e.type === 'event' || e.type === 'milestone');
+			if (tab === 'tasks') filtered = filtered.filter(e => e.type === 'event' || e.type === 'milestone' || e.type === 'allday');
             else if (tab === 'finance') filtered = filtered.filter(e => e.type === 'finance');
             else if (tab === 'timeline_habits') filtered = filtered.filter(e => e.type === 'habit');
 
@@ -2636,6 +2775,7 @@
         document.getElementById('btn-toggle-finance').addEventListener('click', (e) => { state.showFinance = !state.showFinance; e.target.innerText = state.showFinance ? 'Hide Finance' : 'Show Finance'; render(); });
         document.getElementById('btn-toggle-bgs').addEventListener('click', (e) => { state.showBackgrounds = !state.showBackgrounds; e.target.innerText = state.showBackgrounds ? 'Hide Backgrounds' : 'Show Backgrounds'; render(); });
         document.getElementById('btn-toggle-projects').addEventListener('click', (e) => { state.showProjects = !state.showProjects; e.target.innerText = state.showProjects ? 'Hide Projects' : 'Show Projects'; render(); });
+		document.getElementById('btn-toggle-birthdays').addEventListener('click', (e) => { state.showBirthdays = !state.showBirthdays; e.target.innerText = state.showBirthdays ? 'Hide Birthdays' : 'Show Birthdays'; render(); });
 
 		document.getElementById('btn-theme-settings').addEventListener('click', () => {
             
