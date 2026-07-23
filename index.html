@@ -2017,6 +2017,78 @@
             }
         };
 
+// --- Interactive Image Zoom & Pan Engine ---
+        window.zoomImgWheel = (e, img) => {
+            e.preventDefault(); e.stopPropagation();
+            let scale = parseFloat(img.dataset.scale || 1);
+            scale = Math.max(1, Math.min(8, scale + (e.deltaY > 0 ? -0.25 : 0.25)));
+            img.dataset.scale = scale;
+            if (scale === 1) { img.dataset.x = 0; img.dataset.y = 0; img.style.cursor = 'zoom-in'; } 
+            else { img.style.cursor = 'grab'; }
+            img.style.transform = `translate(${img.dataset.x || 0}px, ${img.dataset.y || 0}px) scale(${scale})`;
+        };
+
+        window.panImgStart = (e, img) => {
+            let scale = parseFloat(img.dataset.scale || 1);
+            if (scale <= 1) return; // Only allow panning if zoomed in
+            e.preventDefault(); e.stopPropagation();
+            img.style.cursor = 'grabbing';
+            let startX = e.clientX - parseFloat(img.dataset.x || 0);
+            let startY = e.clientY - parseFloat(img.dataset.y || 0);
+            
+            const onMove = (moveEvent) => {
+                img.dataset.x = moveEvent.clientX - startX;
+                img.dataset.y = moveEvent.clientY - startY;
+                img.style.transform = `translate(${img.dataset.x}px, ${img.dataset.y}px) scale(${scale})`;
+            };
+            const onEnd = () => {
+                img.style.cursor = 'grab';
+                window.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onEnd);
+            };
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onEnd);
+        };
+
+        window.toggleImgZoom = (img) => {
+            let scale = parseFloat(img.dataset.scale || 1);
+            if (scale > 1) {
+                img.dataset.scale = 1; img.dataset.x = 0; img.dataset.y = 0;
+                img.style.transform = 'translate(0px, 0px) scale(1)';
+                img.style.cursor = 'zoom-in';
+            } else {
+                img.dataset.scale = 2.5; img.dataset.x = 0; img.dataset.y = 0;
+                img.style.transform = 'translate(0px, 0px) scale(2.5)';
+                img.style.cursor = 'grab';
+            }
+        };
+
+        window.getMediaContentHTML = (url, isPopOut = false) => {
+            if (!url) return '';
+            const type = getMediaType(url);
+            const maxH = isPopOut ? '100%' : '400px';
+            
+            if (type === 'image') {
+                return `<div style="width:100%; height:${isPopOut ? '100%' : 'auto'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; border-radius:4px;">
+                    <img src="${url}" alt="Preview" style="max-width:100%; max-height:${maxH}; object-fit:contain; cursor:zoom-in; transition:transform 0.1s ease-out; user-select:none; touch-action:none;" onwheel="zoomImgWheel(event, this)" onpointerdown="panImgStart(event, this)" ondblclick="toggleImgZoom(this)" title="Scroll to zoom • Drag to pan • Dbl-click to reset" onerror="this.parentElement.innerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Image failed to load (broken link or hotlink protected).</span>'">
+                </div>`;
+            } else if (type === 'video') {
+                return `<video controls src="${url}" style="max-width:100%; max-height:${maxH}; border-radius:4px;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Video failed to load.</span>'"></video>`;
+            } else if (type === 'audio') {
+                return `<audio controls src="${url}" style="width:100%;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Audio failed to load.</span>'"></audio>`;
+            } else if (type === 'youtube') {
+                let videoId = '';
+                const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+                if (match && match[1]) videoId = match[1];
+                return videoId ? `<iframe width="100%" height="250" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:4px;"></iframe>` : `<a href="${url}" target="_blank" style="color:var(--accent-color);">Open YouTube Link</a>`;
+            } else if (type === 'spotify') {
+                const spotUrl = url.includes('/embed/') ? url : url.replace('open.spotify.com/', 'open.spotify.com/embed/');
+                return `<iframe style="border-radius:12px" src="${spotUrl}" width="100%" height="152" frameborder="0" allowfullscreen allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>`;
+            } else {
+                return `<iframe src="${url}" width="100%" height="${isPopOut ? '100%' : '350'}" frameborder="0" allowfullscreen style="border-radius:4px; background:var(--bg-color); border:none;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ This website blocked iframe embedding.</span>'"></iframe>`;
+            }
+        };
+
         window.toggleInlineTray = (id) => {
             if (!state.expandedInline) state.expandedInline = {};
             state.expandedInline[id] = !state.expandedInline[id];
@@ -2049,10 +2121,10 @@
                         <button class="close-btn" style="font-size: 18px;" onclick="document.getElementById('${wndId}').remove()">&times;</button>
                     </div>
                 </div>
-                <div class="tool-body" style="padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; overflow:auto;">
+                <div class="tool-body" style="padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; overflow:hidden;">
                     <div class="frameless-title">${title || 'Web Viewer'}</div>
-                    <div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; flex:1;">
-                        ${getMediaContentHTML(url)}
+                    <div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; flex:1; overflow:hidden;">
+                        ${getMediaContentHTML(url, true)}
                     </div>
                 </div>
             </div>`;
