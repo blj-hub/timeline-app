@@ -256,7 +256,8 @@
                 </div>
             </div>
             <div class="btn-row" style="margin-top:8px; align-items: center;">
-                <button class="floating-btn secondary circle-btn" onclick="toggleNowLine()" title="Toggle 'Now' Line marker" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-family: sans-serif; font-size: 16px;">I</button>
+                <button class="floating-btn secondary circle-btn" id="btn-calendar-jump" onclick="openCalendarTool()" title="Jump to Date" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 14px;">📅</button>
+<button class="floating-btn secondary circle-btn" id="btn-now-line-toggle" onclick="toggleNowLine()" title="Toggle 'Now' Line marker" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-family: sans-serif; font-size: 16px;">I</button>
                 <button class="floating-btn secondary" id="btn-layouts" onclick="openLayoutsModal()">Layouts</button>
                 <button class="floating-btn secondary" id="btn-theme-settings">Theme & Sync</button>
                 <button class="floating-btn" id="btn-snap-now">Snap to Now</button>
@@ -266,6 +267,19 @@
     </div>
 
     <!-- ================= FLOATING TOOL WINDOWS ================= -->
+	
+	<div class="tool-window" id="tool-calendar" data-def-x="auto" data-def-y="130" data-def-w="260" data-def-h="130" style="top:130px; right:80px; left:auto; width:260px; height:130px; min-width:200px; min-height:100px;">
+        <div class="drag-header" id="hdr-calendar">
+            <span>Jump to Date</span>
+            <div>
+                <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('tool-calendar', this)" title="Toggle Frameless">-</button>
+                <button class="close-btn" style="font-size: 18px;" onclick="closeTool('tool-calendar')">&times;</button>
+            </div>
+        </div>
+        <div class="tool-body" style="display:flex; flex-direction:column; justify-content:center; gap:8px; overflow:hidden;">
+             <input type="date" id="inp-calendar-window" style="width:100%; font-size:14px; padding:8px; cursor:pointer;" onchange="jumpToDate(this.value)">
+        </div>
+    </div>
     
     <div class="tool-window" id="tool-clock" data-def-x="auto" data-def-y="20" data-def-w="300" data-def-h="150" style="top:20px; right:20px; width:300px; height:150px; min-height: 100px; min-width: 200px;">
         <div class="drag-header" id="hdr-clock">
@@ -1388,7 +1402,17 @@
                 state.events[idx] = { ...state.events[idx], ...updatedData }; saveToStorage(); render(); renderTodos(); renderProjects();
             } closeModal();
         });
-        document.getElementById('btn-delete').addEventListener('click', () => { if (confirm("Delete this?")) { state.events = state.events.filter(e => e.id !== state.activeEventId); saveToStorage(); render(); renderTodos(); renderProjects(); closeModal(); } });
+        document.getElementById('btn-delete').addEventListener('click', () => { 
+            if (confirm("Delete this?")) { 
+                const ev = state.events.find(e => e.id === state.activeEventId);
+                if (ev) {
+                    // Clean up any orphaned notifications for this task
+                    state.notifications = state.notifications.filter(n => !n.msg.includes(`"${ev.title}"`));
+                }
+                state.events = state.events.filter(e => e.id !== state.activeEventId); 
+                saveToStorage(); render(); renderTodos(); renderProjects(); renderNotifications(); checkNotifications(); closeModal(); 
+            } 
+        });
 
         document.getElementById('btn-bg-repeating').addEventListener('click', () => { state.modalBgMode = 'repeating'; document.getElementById('btn-bg-repeating').classList.add('active'); document.getElementById('btn-bg-oneoff').classList.remove('active'); document.getElementById('wrapper-standard-fields').style.display = 'none'; document.getElementById('wrapper-repeating-fields').style.display = 'block'; });
         document.getElementById('btn-bg-oneoff').addEventListener('click', () => { state.modalBgMode = 'one-off'; document.getElementById('btn-bg-oneoff').classList.add('active'); document.getElementById('btn-bg-repeating').classList.remove('active'); document.getElementById('wrapper-standard-fields').style.display = 'block'; document.getElementById('wrapper-repeating-fields').style.display = 'none'; });
@@ -1484,7 +1508,7 @@
             window.addEventListener('pointerup', () => { isDragging = false; });
             window.addEventListener('pointercancel', () => { isDragging = false; });
         }
-        ['todo', 'habits', 'notes', 'stats', 'notif', 'timers', 'clock', 'music', 'projects'].forEach(id => makeDraggable(`tool-${id}`, `hdr-${id}`));
+        ['todo', 'habits', 'notes', 'stats', 'notif', 'timers', 'clock', 'music', 'projects', 'calendar'].forEach(id => makeDraggable(`tool-${id}`, `hdr-${id}`));
 
         window.openTool = (id) => { const el = document.getElementById(id); el.classList.add('active'); document.querySelectorAll('.tool-window').forEach(w => w.style.zIndex = 200); el.style.zIndex = 201; };
         window.closeTool = (id) => { document.getElementById(id).classList.remove('active'); };
@@ -1519,7 +1543,9 @@
             document.getElementById('btn-ui-reset').style.display = uiHidden ? 'none' : 'flex';
             
             document.getElementById('btn-theme-settings').style.display = uiHidden ? 'none' : 'inline-block';
-            document.getElementById('btn-layouts').style.display = uiHidden ? 'none' : 'inline-block';
+			document.getElementById('btn-layouts').style.display = uiHidden ? 'none' : 'inline-block';
+			document.getElementById('btn-now-line-toggle').style.display = uiHidden ? 'none' : 'flex';
+			document.getElementById('btn-calendar-jump').style.display = uiHidden ? 'none' : 'flex';
             
             document.getElementById('btn-ui-toggle').innerText = uiHidden ? '+' : '-';
             document.getElementById('btn-ui-toggle').title = uiHidden ? 'Show UI Menus' : 'Hide UI Menus';
@@ -1616,6 +1642,27 @@
             renderLayoutsList();
             document.getElementById('modal-layouts').classList.add('active');
             modalOverlay.classList.add('active');
+        };
+
+// --- Calendar Jump Engine ---
+        window.openCalendarTool = () => {
+            // Pre-fill input with the date currently at the center of the screen
+            const currentCenter = new Date(state.viewCenterTime);
+            const yyyy = currentCenter.getFullYear();
+            const mm = String(currentCenter.getMonth() + 1).padStart(2, '0');
+            const dd = String(currentCenter.getDate()).padStart(2, '0');
+            document.getElementById('inp-calendar-window').value = `${yyyy}-${mm}-${dd}`;
+            
+            openTool('tool-calendar');
+        };
+
+        window.jumpToDate = (dateStr) => {
+            if (!dateStr) return;
+            const [y, m, d] = dateStr.split('-').map(Number);
+            // Center timeline on noon (12:00) of the selected date
+            state.viewCenterTime = new Date(y, m - 1, d, 12, 0, 0).getTime();
+            render();
+            closeTool('tool-calendar'); // Cleanly hide window after jumping
         };
 
         window.saveLayout = () => {
@@ -1740,10 +1787,10 @@
         };
 
         window.deleteProjectItem = (id, isTimeline) => {
-            if(isTimeline) { state.events = state.events.filter(x=>x.id!==id); render(); } 
-            else { state.projectItems = state.projectItems.filter(x=>x.id!==id); }
-            saveToStorage(); renderProjects();
-        };
+    if(isTimeline) { state.events = state.events.filter(x=>x.id!==id); render(); } 
+    else { state.projectItems = state.projectItems.filter(x=>x.id!==id); }
+    saveToStorage(); renderProjects(); renderTodos();
+	};
 
         window.addProjectItem = () => {
             const type = document.getElementById('proj-item-type').value;
@@ -1865,10 +1912,16 @@
                 const btnClass = hasNote ? 'btn btn-secondary' : 'btn';
                 const noteBtn = `<button class="${btnClass}" style="padding:2px 6px; font-size:12px; ${btnStyle}" onclick="toggleProjectItemNote('${item.id}')" title="Add/Toggle Note">📝</button>`;
                 
+                const actions = getLinkActionButtons(item);
+
                 let tHtml = "";
                 if (state.projectEditMode && type !== 'notes') {
-                    tHtml = `<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="${item.isTimeline ? `updateEventTitle('${item.id}', this.value)` : `updateProjectItemTitle('${item.id}', this.value)`}" style="flex:1; padding:2px 4px; font-size:12px; margin-left:6px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">`;
-                } else {
+				const isLink = type === 'link1' || type === 'link2';
+				tHtml = `<div style="display:flex; flex:1; gap:4px; margin-left:6px;">
+				<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="${item.isTimeline ? `updateEventTitle('${item.id}', this.value)` : `updateProjectItemTitle('${item.id}', this.value)`}" placeholder="Title" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">
+				${isLink ? `<input type="text" value="${(item.url||'').replace(/"/g, '&quot;')}" onchange="updateProjectItemUrl('${item.id}', this.value)" placeholder="URL" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">` : ''}
+				</div>`;
+				} 		else {
                     if(type === 'link1' || type === 'link2') { tHtml = `<a href="${item.url}" target="_blank" style="color:var(--accent-color); text-decoration:underline; margin-left:6px;">${item.title}</a>`; } 
                     else { tHtml = `<span class="task-title" style="margin-left:6px;">${item.title}</span>`; }
                 }
@@ -1881,11 +1934,11 @@
                     const eBtnClass = hasEvtNote ? 'btn btn-secondary' : 'btn';
                     inner = `<div class="left">${cBox}${tHtml}</div><div class="right"><button class="${eBtnClass}" style="padding:2px 6px; font-size:12px; ${eBtnStyle}" onclick="openModal(state.events.find(x=>x.id==='${item.id}'))" title="Edit on Timeline">📝</button>${controls}</div>`;
                 } else if (type === 'link1') {
-                    inner = `<div class="left">${cBox}${tHtml}</div><div class="right">${noteBtn}${controls}</div><div style="width:100%; display:${state.expandedProjectNotes[item.id] ? 'block' : 'none'}; margin-top:8px;"><textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateProjectItemNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea></div>`;
+                    inner = `<div class="left">${cBox}${tHtml}</div><div class="right">${actions.btns}${noteBtn}${controls}</div><div style="width:100%; display:${state.expandedProjectNotes[item.id] ? 'block' : 'none'}; margin-top:8px;"><textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateProjectItemNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea></div>${actions.tray}`;
                 } else if (type === 'note') {
                     inner = `<div class="left">${dot}${tHtml}</div><div class="right">${noteBtn}${controls}</div><div style="width:100%; display:${state.expandedProjectNotes[item.id] ? 'block' : 'none'}; margin-top:8px;"><textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateProjectItemNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea></div>`;
                 } else if (type === 'link2') {
-                    inner = `<div class="left">${dot}${tHtml}</div><div class="right">${noteBtn}${controls}</div><div style="width:100%; display:${state.expandedProjectNotes[item.id] ? 'block' : 'none'}; margin-top:8px;"><textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateProjectItemNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea></div>`;
+                    inner = `<div class="left">${dot}${tHtml}</div><div class="right">${actions.btns}${noteBtn}${controls}</div><div style="width:100%; display:${state.expandedProjectNotes[item.id] ? 'block' : 'none'}; margin-top:8px;"><textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateProjectItemNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea></div>${actions.tray}`;
                 } else if (type === 'notes') {
                     div.style.padding = '0'; div.style.border = 'none'; div.style.background = 'transparent';
                     let titleHTML = state.projectEditMode ? `<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="updateProjectItemTitle('${item.id}', this.value)" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">` : `<span style="font-size:12px; font-weight:600; color:var(--text-secondary);">${item.title}</span>`;
@@ -1919,8 +1972,124 @@
         window.toggleCustomTodoNote = (id) => { state.expandedTodoNotes[id] = !state.expandedTodoNotes[id]; renderTodos(); };
         window.updateCustomTodoNote = (id, val) => { const t = state.customTodos.find(x=>x.id===id); if(t) { t.note = val; saveToStorage(); } };
         window.updateCustomTodoTitle = (id, val) => { const t = state.customTodos.find(x=>x.id===id); if(t) { t.title = val; saveToStorage(); renderTodos(); } };
+		window.updateProjectItemUrl = (id, val) => { const i = state.projectItems.find(x=>x.id===id); if(i) { i.url = val; saveToStorage(); } };
+		window.updateCustomTodoUrl = (id, val) => { const t = state.customTodos.find(x=>x.id===id); if(t) { t.url = val; saveToStorage(); } };
+		window.updateListUrl = (id, val) => { const i = state.listItems.find(x=>x.id===id); if(i) { i.url = val; saveToStorage(); } };
+		window.deleteCustomTodo = (id) => { 
+		state.customTodos = state.customTodos.filter(x => x.id !== id); 
+		saveToStorage(); 
+		renderTodos(); 
+		};
+		
+		// --- Universal Inline Tray & Infinite Pop-Out Engine ---
+        window.getMediaType = (url) => {
+            if (!url || typeof url !== 'string') return null;
+            const clean = url.trim();
+            // Smart check for standard extensions OR query parameters like ?format=jpg
+            if (/(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif))/i.test(clean)) return 'image';
+            if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(clean)) return 'video';
+            if (/\.(mp3|wav|m4a|aac|flac)(\?.*)?$/i.test(clean)) return 'audio';
+            if (/(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)/i.test(clean)) return 'youtube';
+            if (/(open\.spotify\.com\/)/i.test(clean)) return 'spotify';
+            return 'web'; // Defaults to generic iframe for websites like Giphy!
+        };
+
+        window.getMediaContentHTML = (url) => {
+            if (!url) return '';
+            const type = getMediaType(url);
+            if (type === 'image') {
+                return `<img src="${url}" alt="Preview" style="max-width:100%; max-height:400px; border-radius:4px; object-fit:contain;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Image failed to load (broken link or hotlink protected).</span>'">`;
+            } else if (type === 'video') {
+                return `<video controls src="${url}" style="max-width:100%; max-height:400px; border-radius:4px;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Video failed to load.</span>'"></video>`;
+            } else if (type === 'audio') {
+                return `<audio controls src="${url}" style="width:100%;" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Audio failed to load.</span>'"></audio>`;
+            } else if (type === 'youtube') {
+                let videoId = '';
+                const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+                if (match && match[1]) videoId = match[1];
+                return videoId ? `<iframe width="100%" height="250" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen style="border-radius:4px;"></iframe>` : `<a href="${url}" target="_blank" style="color:var(--accent-color);">Open YouTube Link</a>`;
+            } else if (type === 'spotify') {
+                const spotUrl = url.includes('/embed/') ? url : url.replace('open.spotify.com/', 'open.spotify.com/embed/');
+                return `<iframe style="border-radius:12px" src="${spotUrl}" width="100%" height="152" frameborder="0" allowfullscreen allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"></iframe>`;
+            } else {
+                // Generic web page iframe fallback
+                return `<iframe src="${url}" width="100%" height="350" frameborder="0" allowfullscreen style="border-radius:4px; background:var(--bg-color);" onerror="this.outerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ This website blocked iframe embedding.</span>'"></iframe>`;
+            }
+        };
+
+        window.toggleInlineTray = (id) => {
+            if (!state.expandedInline) state.expandedInline = {};
+            state.expandedInline[id] = !state.expandedInline[id];
+            saveToStorage();
+            renderTodos();
+            renderProjects();
+        };
+
+        window.spawnPopOutWindow = (title, url) => {
+            if (!url || !url.trim()) return;
+            const wndId = 'popout_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            const hdrId = 'hdr_' + wndId;
+            const offset = (document.querySelectorAll('.dynamic-popout').length % 6) * 30;
+            
+            const div = document.createElement('div');
+            div.className = 'tool-window active dynamic-popout';
+            div.id = wndId;
+            div.setAttribute('data-def-x', 250 + offset);
+            div.setAttribute('data-def-y', 130 + offset);
+            div.setAttribute('data-def-w', 500);
+            div.setAttribute('data-def-h', 400);
+            div.style.cssText = `top:${130 + offset}px; left:${250 + offset}px; width:500px; height:400px; z-index:300; min-width:250px; min-height:200px;`;
+            
+            div.innerHTML = `
+                <div class="drag-header" id="${hdrId}">
+                    <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:280px;" title="${title}">${title || 'Web Viewer'}</span>
+                    <div>
+                        <a href="${url}" target="_blank" class="btn btn-secondary" style="font-size: 11px; padding: 2px 6px; margin-right: 6px; text-decoration:none;" title="Open in Browser Tab">🔗</a>
+                        <button class="close-btn" style="font-size: 18px; margin-right: 6px;" onclick="toggleFrameless('${wndId}', this)" title="Toggle Frameless">-</button>
+                        <button class="close-btn" style="font-size: 18px;" onclick="document.getElementById('${wndId}').remove()">&times;</button>
+                    </div>
+                </div>
+                <div class="tool-body" style="padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; overflow:auto;">
+                    <div class="frameless-title">${title || 'Web Viewer'}</div>
+                    <div style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; flex:1;">
+                        ${getMediaContentHTML(url)}
+                    </div>
+                </div>
+            </div>`;
+            
+            document.body.appendChild(div);
+            makeDraggable(wndId, hdrId);
+            
+            div.addEventListener('pointerdown', () => {
+                document.querySelectorAll('.tool-window').forEach(w => w.style.zIndex = 200);
+                div.style.zIndex = 301;
+            });
+        };
+
+        window.getLinkActionButtons = (item) => {
+            if (!item.url || !item.url.trim()) return { btns: '', tray: '' };
+            const isOpen = state.expandedInline && state.expandedInline[item.id];
+            const safeTitle = (item.title || 'Reference').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const safeUrl = item.url.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            
+            const inlineBtn = `<button class="btn ${isOpen ? 'btn-secondary' : ''}" style="padding:2px 6px; font-size:12px; margin-right:2px; ${isOpen ? '' : 'background:transparent; border:none; box-shadow:none; opacity:0.7;'}" onclick="toggleInlineTray('${item.id}')" title="Toggle Inline Tray">🔽</button>`;
+            const popOutBtn = `<button class="btn" style="padding:2px 6px; font-size:12px; margin-right:2px; background:transparent; border:none; box-shadow:none; opacity:0.7;" onclick="spawnPopOutWindow('${safeTitle}', '${safeUrl}')" title="Pop Out in Floating Window">🗖</button>`;
+            
+            const btns = inlineBtn + popOutBtn;
+            const tray = isOpen ? `<div style="width:100%; display:flex; justify-content:center; margin-top:8px; background:var(--ruler-bg); padding:8px; border-radius:6px; border:1px solid var(--input-border);">${getMediaContentHTML(item.url)}</div>` : '';
+            
+            return { btns, tray };
+        };
+		
         
-        window.moveTodo = (id, newTab, isTimeline) => { if(isTimeline) { const e = state.events.find(x=>x.id===id); if(e) e.todoTab = newTab; } else { const t = state.customTodos.find(x=>x.id===id); if(t) t.tab = newTab; } saveToStorage(); renderTodos(); render(); };
+        window.moveTodo = (id, newTab) => { 
+    const e = state.events.find(x => x.id === id); 
+    if(e) e.todoTab = newTab; 
+    const t = state.customTodos.find(x => x.id === id); 
+    if(t) t.tab = newTab; 
+    saveToStorage(); renderTodos(); render(); 
+	};
+	window.moveTodoTimeline = window.moveTodo;
         window.reorderCustomTodo = (id, dir) => { const arr = state.customTodos; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderTodos(); } } };
 
         window.switchListTab = (tab) => { state.activeListTab = tab; renderTodos(); };
@@ -2041,6 +2210,8 @@ bDays.forEach(b => {
                 const btnStyle = hasNote ? '' : 'background:transparent; border:none; box-shadow:none; padding:2px; color:var(--text-secondary); opacity:0.6;';
                 const btnClass = hasNote ? 'btn btn-secondary' : 'btn';
                 const noteBtn = `<button class="${btnClass}" style="padding:2px 6px; font-size:12px; ${btnStyle}" onclick="${item.isTimeline ? `openModal(state.events.find(x=>x.id==='${item.id}'))` : `toggleCustomTodoNote('${item.id}')`}" title="${item.isTimeline ? 'Edit on Timeline' : 'Add/Toggle Note'}">📝</button>`;
+                
+                const actions = getLinkActionButtons(item);
 
                 let prefix = '';
                 if(item.type === 'note' || item.type === 'link2') { prefix = `<span style="margin: 0 4px; font-size: 16px; line-height: 0; color:var(--text-secondary);">&bull;</span>`; }
@@ -2048,8 +2219,12 @@ bDays.forEach(b => {
 
                 let tHtml = "";
                 if (state.todoEditMode && !item.isTimeline) {
-                    tHtml = `<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="updateCustomTodoTitle('${item.id}', this.value)" style="flex:1; padding:2px 4px; font-size:12px; margin-left:6px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">`;
-                } else if(state.todoEditMode && item.isTimeline) {
+				const isLink = item.type === 'link1' || item.type === 'link2';
+				tHtml = `<div style="display:flex; flex:1; gap:4px; margin-left:6px;">
+				<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="updateCustomTodoTitle('${item.id}', this.value)" placeholder="Title" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">
+				${isLink ? `<input type="text" value="${(item.url||'').replace(/"/g, '&quot;')}" onchange="updateCustomTodoUrl('${item.id}', this.value)" placeholder="URL" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">` : ''}
+				</div>`;
+				} else if(state.todoEditMode && item.isTimeline) {
                     tHtml = `<input type="text" value="${item.title.replace(/"/g, '&quot;')}" onchange="updateEventTitle('${item.id}', this.value)" style="flex:1; padding:2px 4px; font-size:12px; margin-left:6px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">`;
                 } else {
                     if(item.type === 'link1' || item.type === 'link2') { tHtml = `<a href="${item.url}" target="_blank" style="color:var(--accent-color); text-decoration:underline; margin-left:6px;">${item.title}</a>`; }
@@ -2058,11 +2233,12 @@ bDays.forEach(b => {
 
                 div.innerHTML = `
                     <div class="left">${prefix}${tHtml}</div>
-                    <div class="right">${noteBtn}${controls}</div>
+                    <div class="right">${actions.btns}${noteBtn}${controls}</div>
                     <div style="width:100%; display:${(!item.isTimeline && state.expandedTodoNotes[item.id]) ? 'block' : 'none'}; margin-top:8px;">
                         <textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateCustomTodoNote('${item.id}', this.value)" placeholder="Add a note...">${item.note || ''}</textarea>
                     </div>
-                `; 
+                    ${actions.tray}
+                `;
                 c.appendChild(div);
             });
 
@@ -2094,25 +2270,32 @@ bDays.forEach(b => {
                 const btnStyle = hasNote ? '' : 'background:transparent; border:none; box-shadow:none; padding:2px; color:var(--text-secondary); opacity:0.6;';
                 const btnClass = hasNote ? 'btn btn-secondary' : 'btn';
                 const noteBtn = `<button class="${btnClass}" style="padding:2px 6px; font-size:12px; ${btnStyle}" onclick="toggleListNote('${i.id}')" title="Add/Toggle Note">📝</button>`;
+                
+                const actions = getLinkActionButtons(i);
 
                 let prefix = '';
-                if(i.type.includes('todo_')) { prefix = `<input type="checkbox" ${i.completed?'checked':''} onchange="toggleListCompletion('${i.id}', this.checked)">`; }
+                if(i.type === 'todo' || i.type === 'link1') { prefix = `<input type="checkbox" ${i.completed?'checked':''} onchange="toggleListCompletion('${i.id}', this.checked)">`; }
                 else { prefix = `<span style="margin: 0 4px; font-size: 16px; line-height: 0; color:var(--text-secondary);">&bull;</span>`; }
 
                 let tHtml = "";
                 if (state.todoEditMode) {
-                    tHtml = `<input type="text" value="${i.title.replace(/"/g, '&quot;')}" onchange="updateListTitle('${i.id}', this.value)" style="flex:1; padding:2px 4px; font-size:12px; margin-left:6px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">`;
-                } else {
-                    if(i.type.includes('_link')) { tHtml = `<a href="${i.url}" target="_blank" style="color:var(--accent-color); text-decoration:underline; margin-left:6px;">${i.title}</a>`; }
+				const isLink = i.type === 'link1' || i.type === 'link2';
+				tHtml = `<div style="display:flex; flex:1; gap:4px; margin-left:6px;">
+				<input type="text" value="${i.title.replace(/"/g, '&quot;')}" onchange="updateListTitle('${i.id}', this.value)" placeholder="Title" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">
+				${isLink ? `<input type="text" value="${(i.url||'').replace(/"/g, '&quot;')}" onchange="updateListUrl('${i.id}', this.value)" placeholder="URL" style="flex:1; padding:2px 4px; font-size:12px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary);">` : ''}
+				</div>`;
+				} else {
+                    if(i.type === 'link1' || i.type === 'link2' || i.type.includes('link')) { tHtml = `<a href="${i.url}" target="_blank" style="color:var(--accent-color); text-decoration:underline; margin-left:6px;">${i.title}</a>`; }
                     else { tHtml = `<span class="task-title" style="margin-left:6px;">${i.title}</span>`; }
                 }
 
                 item.innerHTML = `
                     <div class="left">${prefix}${tHtml}</div>
-                    <div class="right">${noteBtn}${controls}</div>
+                    <div class="right">${actions.btns}${noteBtn}${controls}</div>
                     <div style="width:100%; display:${state.expandedListNotes[i.id] ? 'block' : 'none'}; margin-top:8px;">
                         <textarea style="width:100%; resize:vertical; min-height:40px; background:var(--bg-color); border:1px solid var(--input-border); color:var(--text-primary); padding:6px; border-radius:4px;" onchange="updateListNote('${i.id}', this.value)" placeholder="Add a note...">${i.note || ''}</textarea>
                     </div>
+                    ${actions.tray}
                 `; 
                 lC.appendChild(item);
             });
@@ -2138,6 +2321,17 @@ bDays.forEach(b => {
         window.reorderTrackedHabit = (id, dir) => { const arr = state.trackedHabits; const idx = arr.findIndex(x => x.id === id); if (idx > -1) { const newIdx = idx + dir; if(newIdx >= 0 && newIdx < arr.length) { const temp = arr[idx]; arr[idx] = arr[newIdx]; arr[newIdx] = temp; saveToStorage(); renderHabitTracker(); } } };
         window.moveTrackedHabit = (id, newTab) => { const h = state.trackedHabits.find(x=>x.id===id); if(h) { h.tab = newTab; saveToStorage(); renderHabitTracker(); } };
         window.updateTrackedHabitTitle = (id, val) => { const h = state.trackedHabits.find(x=>x.id===id); if(h) { h.title = val; saveToStorage(); renderHabitTracker(); } };
+		window.toggleHabitDay = (id, dayNum) => {
+		const h = state.trackedHabits.find(x => x.id === id);
+		if (h) {
+        if (!h.activeDays) h.activeDays = [];
+        const idx = h.activeDays.indexOf(dayNum);
+        if (idx > -1) h.activeDays.splice(idx, 1);
+        else h.activeDays.push(dayNum);
+        saveToStorage();
+        renderHabitTracker();
+		}
+		};
 
         function getStartOfWeek(d) { const date = new Date(d); const day = date.getDay(); const diff = date.getDate() - day + (day === 0 ? -6 : 1); return new Date(date.setDate(diff)); }
         function getCurrentPeriodString(d, type) { if(type === 'daily') return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); if(type === 'weekly') { let sw = getStartOfWeek(d); return sw.getFullYear() + '-W' + Math.floor(sw.getTime() / 604800000); } if(type === 'monthly') return d.getFullYear() + '-M' + d.getMonth(); }
@@ -2191,14 +2385,20 @@ bDays.forEach(b => {
 
                     let rowHtml = `<div class="habit-grid-daily"><div>${tHtml}</div>`;
                     for(let i=0; i<7; i++) {
-                        const d = gridDates[i]; const dStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-                        const sDate = h.startDate ? new Date(h.startDate + 'T00:00:00') : null; const eDate = h.endDate ? new Date(h.endDate + 'T00:00:00') : null;
-                        const inRange = (!sDate || d >= sDate) && (!eDate || d <= eDate);
-                        if (inRange && (h.activeDays || []).includes(d.getDay())) {
-                            const isChecked = (state.habitCompletions[h.id] || []).includes(dStr);
-                            rowHtml += `<div class="habit-cell"><input type="checkbox" style="width:20px; height:20px;" ${isChecked?'checked':''} onchange="toggleHabitComp('${h.id}', '${dStr}', this.checked)"></div>`;
-                        } else { rowHtml += `<div class="habit-cell"><div class="inactive-box"></div></div>`; }
-                    }
+					const d = gridDates[i]; const dStr = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+					const sDate = h.startDate ? new Date(h.startDate + 'T00:00:00') : null; const eDate = h.endDate ? new Date(h.endDate + 'T00:00:00') : null;
+					const inRange = (!sDate || d >= sDate) && (!eDate || d <= eDate);
+					const isActiveDay = (h.activeDays || []).includes(d.getDay());
+    
+					if (state.habitEditMode) {
+					// Render Day Active/Inactive Toggle Buttons in Edit Mode
+					const btnStyle = isActiveDay ? 'background:var(--accent-color); color:#fff; opacity:1;' : 'background:var(--grid-color); color:var(--text-secondary); opacity:0.3;';
+					rowHtml += `<div class="habit-cell"><button class="btn" style="padding:0; width:24px; height:24px; border-radius:4px; font-size:12px; font-weight:bold; ${btnStyle}" onclick="toggleHabitDay('${h.id}', ${d.getDay()})" title="Toggle whether habit happens on this day">${isActiveDay ? '✓' : '-'}</button></div>`;
+					} else if (inRange && isActiveDay) {
+					const isChecked = (state.habitCompletions[h.id] || []).includes(dStr);
+					rowHtml += `<div class="habit-cell"><input type="checkbox" style="width:20px; height:20px;" ${isChecked?'checked':''} onchange="toggleHabitComp('${h.id}', '${dStr}', this.checked)"></div>`;
+					} else { rowHtml += `<div class="habit-cell"><div class="inactive-box"></div></div>`; }
+					}
                     let controls = state.habitEditMode ? `<div class="right" style="gap:4px;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', -1)">▲</button><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="reorderTrackedHabit('${h.id}', 1)">▼</button>${getGenericMoveDropdownHTML(state.habitTabs, h.tab, 'moveTrackedHabit', h.id)}<button class="close-btn" style="color:#ef4444;" onclick="deleteTrackedHabit('${h.id}')">&times;</button></div>` : '';
                     rowHtml += `<div class="habit-cell">${controls}</div></div>`;
                     c.innerHTML += rowHtml;
@@ -2630,7 +2830,7 @@ bDays.forEach(b => {
                     e.reminders.forEach(rm => {
                         const tTime = e.start - (rm * 60000);
                         if(nowMs >= tTime && !e.remindersTriggered.includes(rm)) {
-                            state.notifications.push({ id: 'notif_'+Date.now(), msg: `Upcoming Timeline: "${e.title}" in ${rm} mins`, time: nowMs, dismissed: false });
+                            state.notifications.push({ id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), msg: `Upcoming Timeline: "${e.title}" in ${rm} mins`, time: nowMs, dismissed: false });
                             e.remindersTriggered.push(rm); updated = true;
                         }
                     });
@@ -2648,7 +2848,7 @@ bDays.forEach(b => {
                 if(r.type === 'one-off' && r.exactDate === curDateS && r.time === curTime) trig = true;
                 
                 if(trig && (!r.lastTriggered || nowMs - r.lastTriggered > 60000)) {
-                    state.notifications.push({ id: 'notif_rem_'+Date.now(), msg: `Reminder: ${r.title}`, time: nowMs, dismissed: false });
+                    state.notifications.push({ id: 'notif_rem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), msg: `Reminder: ${r.title}`, time: nowMs, dismissed: false });
                     r.lastTriggered = nowMs; updated = true;
                 }
             });
@@ -2664,13 +2864,32 @@ bDays.forEach(b => {
             const c = document.getElementById('notifications-list-container'); c.innerHTML = '';
             const active = state.notifications.filter(n => !n.dismissed);
             if(active.length === 0) { c.innerHTML = '<p style="color:var(--text-secondary); text-align:center; margin-top:20px;">No new notifications</p>'; return; }
+            
+            // Add "Acknowledge All" button if there are multiple notifications
+            if (active.length > 1) {
+                const btnWrap = document.createElement('div');
+                btnWrap.style.cssText = "display:flex; justify-content:flex-end; margin-bottom:8px;";
+                btnWrap.innerHTML = `<button class="btn btn-secondary" style="font-size:11px; padding:4px 10px;" onclick="dismissAllNotifications()">Acknowledge All (${active.length})</button>`;
+                c.appendChild(btnWrap);
+            }
+
             active.forEach(n => {
                 const item = document.createElement('div'); item.className = 'list-item';
                 item.innerHTML = `<div class="left"><span style="font-size:20px;">🔔</span><span>${n.msg}</span></div><button class="btn btn-secondary" style="font-size:12px; padding:4px 8px;" onclick="dismissNotification('${n.id}')">Acknowledge</button>`;
                 c.appendChild(item);
             });
         }
-        window.dismissNotification = (id) => { const n = state.notifications.find(x=>x.id===id); if(n) n.dismissed = true; saveToStorage(); renderNotifications(); checkNotifications(); };
+        
+        window.dismissNotification = (id) => { 
+            // Using filter/forEach instead of .find() cleanly wipes out identical zombie IDs
+            state.notifications.forEach(n => { if (n.id === id) n.dismissed = true; }); 
+            saveToStorage(); renderNotifications(); checkNotifications(); 
+        };
+
+        window.dismissAllNotifications = () => {
+            state.notifications.forEach(n => n.dismissed = true);
+            saveToStorage(); renderNotifications(); checkNotifications();
+        };
 
         // --- Multi-Touch Pinch to Zoom & Canvas Interactions ---
         let activePointers = [];
