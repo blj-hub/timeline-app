@@ -220,6 +220,7 @@
 <body>
 
     <div id="app">
+        <div id="atmosphere-layer" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:0; pointer-events:none; overflow:hidden; background:transparent;"></div>
         <canvas id="timeline-canvas"></canvas>
         <div id="events-container"></div>
         <div id="now-line"></div>
@@ -672,10 +673,94 @@
         </div>
 
         <!-- THEME SETTINGS & SYNC MODAL -->
+        <!-- THEME SETTINGS & SYNC MODAL -->
         <div class="modal-window" id="modal-theme">
             <div class="modal-header"><h3>Theme & Sync Settings</h3><button class="close-btn" onclick="closeModal()">&times;</button></div>
             <div class="modal-body">
                 
+                <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Live Backgrounds & Video Library</h4>
+                <div class="segmented-control" style="margin-bottom:10px;">
+                    <div class="segmented-btn active" id="atmo-btn-solid" onclick="switchAtmoMode('solid')">Solid Color</div>
+                    <div class="segmented-btn" id="atmo-btn-video" onclick="switchAtmoMode('video')">Video & Media Library</div>
+                </div>
+
+                <!-- Video Library Manager -->
+                <div id="atmo-view-video" style="display:none; flex-direction:column; gap:8px; background:var(--ruler-bg); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--input-border);">
+                    <div style="display:flex; gap:6px;">
+                        <input type="text" id="atmo-vid-name" placeholder="Preset Name (e.g. Lofi Girl)" style="flex:1; font-size:12px;">
+                        <input type="text" id="atmo-vid-url" placeholder="YouTube, MP4, GIF, or Image URL..." style="flex:2; font-size:12px;">
+                        <button class="btn btn-primary" onclick="addAtmoVideo()" style="font-size:11px; padding:4px 8px;">+ Save</button>
+                    </div>
+                    <div id="atmo-video-list" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin-top:4px; border-top:1px solid var(--input-border); padding-top:6px;"></div>
+                </div>
+
+                <!-- Shared Media Framing, Audio & Filters Controls -->
+                <div id="atmo-view-filters" style="display:none; flex-direction:column; gap:8px; background:var(--ruler-bg); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--input-border);">
+                    <div style="font-size:11px; font-weight:700; color:var(--accent-color); text-transform:uppercase; letter-spacing:0.5px;">1. Color & Visibility</div>
+                    <div class="form-row" style="align-items:center;">
+                        <label style="flex:1; font-size:12px;">Background Dim:</label>
+                        <select id="atmo-dim" onchange="updateAtmosphereSettings()" style="flex:1; font-size:12px;">
+                            <option value="0">0% (Bright)</option><option value="0.2">20%</option><option value="0.4">40%</option>
+                            <option value="0.6" selected>60% (Cozy)</option><option value="0.8">80% (Dark)</option>
+                        </select>
+                    </div>
+                    <div class="form-row" style="align-items:center;">
+                        <label style="flex:1; font-size:12px;">Background Blur:</label>
+                        <select id="atmo-blur" onchange="updateAtmosphereSettings()" style="flex:1; font-size:12px;">
+                            <option value="0px">0px (Sharp)</option><option value="2px">2px (Subtle)</option>
+                            <option value="5px" selected>5px (Soft)</option><option value="10px">10px (Heavy)</option>
+                        </select>
+                    </div>
+
+                    <div id="atmo-media-controls" style="display:none; flex-direction:column; gap:8px; margin-top:4px; padding-top:8px; border-top:1px solid var(--input-border);">
+                        <div style="font-size:11px; font-weight:700; color:var(--accent-color); text-transform:uppercase; letter-spacing:0.5px; display:flex; justify-content:space-between; align-items:center;">
+                            <span>2. Size & Framing</span>
+                            <button class="btn btn-secondary" style="font-size:10px; padding:2px 6px;" onclick="resetAtmoFraming()">Reset Framing</button>
+                        </div>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Media Fit Mode:</label>
+                            <select id="atmo-fit" onchange="updateAtmosphereSettings()" style="flex:1.5; font-size:12px;">
+                                <option value="cover" selected>Cover (Fill & Crop)</option>
+                                <option value="contain">Contain (Show Whole)</option>
+                                <option value="fill">Stretch to Fill</option>
+                                <option value="none">Original Pixel Size</option>
+                            </select>
+                        </div>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Zoom / Scale:</label>
+                            <input type="range" id="atmo-scale" min="0.1" max="3" step="0.05" value="1" oninput="document.getElementById('atmo-scale-val').innerText = Math.round(this.value * 100) + '%'; updateAtmosphereSettings();" style="flex:2;">
+                            <span id="atmo-scale-val" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">100%</span>
+                        </div>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Pan X (Horizontal):</label>
+                            <input type="range" id="atmo-pos-x" min="-800" max="800" step="10" value="0" oninput="document.getElementById('atmo-posx-val').innerText = this.value + 'px'; updateAtmosphereSettings();" style="flex:2;">
+                            <span id="atmo-posx-val" style="width:45px; text-align:right; font-size:11px; font-weight:bold;">0px</span>
+                        </div>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Pan Y (Vertical):</label>
+                            <input type="range" id="atmo-pos-y" min="-800" max="800" step="10" value="0" oninput="document.getElementById('atmo-posy-val').innerText = this.value + 'px'; updateAtmosphereSettings();" style="flex:2;">
+                            <span id="atmo-posy-val" style="width:45px; text-align:right; font-size:11px; font-weight:bold;">0px</span>
+                        </div>
+
+                        <div style="font-size:11px; font-weight:700; color:var(--accent-color); text-transform:uppercase; letter-spacing:0.5px; margin-top:4px; padding-top:8px; border-top:1px solid var(--input-border);">3. Audio & Speed</div>
+                        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer;">
+                            <input type="checkbox" id="atmo-unmute" onchange="updateAtmosphereSettings()">
+                            🔊 Play Audio from Video / YouTube Stream
+                        </label>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Media Volume:</label>
+                            <input type="range" id="atmo-vol" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('atmo-vol-val').innerText = Math.round(this.value * 100) + '%'; updateAtmosphereSettings();" style="flex:2;">
+                            <span id="atmo-vol-val" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">50%</span>
+                        </div>
+                        <div class="form-row" style="align-items:center;">
+                            <label style="flex:1; font-size:12px;">Playback Speed:</label>
+                            <input type="range" id="atmo-media-speed" min="0.25" max="2" step="0.25" value="1" oninput="document.getElementById('atmo-mspeed-val').innerText = this.value + 'x'; updateAtmosphereSettings();" style="flex:2;">
+                            <span id="atmo-mspeed-val" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">1x</span>
+                        </div>
+                    </div>
+                </div>
+                <hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
+
                 <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Theme Presets & Custom Themes</h4>
                 <div style="display:flex; gap:8px; margin-bottom:10px;">
                     <button class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="applyThemePreset('dark')">Dark Theme</button>
@@ -761,6 +846,10 @@
             layouts: {},
             savedThemes: {},
             
+			atmoMode: 'solid', atmoVideoUrl: '', atmoDim: '0.6', atmoBlur: '5px', atmoFit: 'cover', atmoScale: 1, atmoPosX: 0, atmoPosY: 0, atmoMediaSpeed: 1, atmoMuted: true, atmoVol: 0.5,
+            atmoVideoLibrary: [
+            ],
+			
             musicEmbedTabs: ['Favorites'], activeMusicEmbedTab: 'Favorites', musicEmbeds: [], musicEditMode: false,
             radioTabs: ['Stations'], activeRadioTab: 'Stations', radios: [],
             
@@ -986,6 +1075,7 @@
             renderAll();
             resizeCanvas();
             checkNotifications();
+            applyAtmosphere();
         }
 
         function loadFromLocalFallback() {
@@ -1157,7 +1247,12 @@
                 if (mode === 'hours') nextD.setHours(nextD.getHours() + 1); else nextD.setDate(nextD.getDate() + 1);
                 const nextT = nextD.getTime(); const nextX = timeToX(nextT); const colWidth = nextX - x;
 
-                if (mode === 'days' && (d.getDay() === 0 || d.getDay() === 6)) { ctx.fillStyle = activeTheme.weekendBg; ctx.fillRect(x, RULER_HEIGHT, colWidth, height - RULER_HEIGHT); ctx.fillStyle = activeTheme.textSecondary; }
+                if (mode === 'days' && (d.getDay() === 0 || d.getDay() === 6)) { 
+                    const isLiveBg = state.atmoMode && state.atmoMode !== 'solid';
+                    ctx.fillStyle = isLiveBg ? hexToRgba(activeTheme.weekendBg, 0.35) : activeTheme.weekendBg; 
+                    ctx.fillRect(x, RULER_HEIGHT, colWidth, height - RULER_HEIGHT); 
+                    ctx.fillStyle = activeTheme.textSecondary; 
+                }
                 ctx.beginPath(); ctx.moveTo(x, AXIS_Y); ctx.lineTo(x, AXIS_Y + 10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, RULER_HEIGHT); ctx.lineTo(x, height); ctx.strokeStyle = activeTheme.gridLines; ctx.stroke(); ctx.strokeStyle = activeTheme.textSecondary;
 
                 ctx.font = '500 11px -apple-system, sans-serif'; ctx.textAlign = 'center';
@@ -1980,6 +2075,248 @@
 		saveToStorage(); 
 		renderTodos(); 
 		};
+		
+		// --- Consolidated Live Backgrounds & Video Library Engine ---
+        window.switchAtmoMode = (mode) => {
+            state.atmoMode = mode;
+            updateAtmosphereSettings();
+        };
+
+        window.applyMediaAttributes = () => {
+            const mediaSpeed = state.atmoMediaSpeed || 1;
+            const isMuted = state.atmoMuted === undefined ? true : state.atmoMuted;
+            const vol = state.atmoVol !== undefined ? state.atmoVol : 0.5;
+
+            const vid = document.querySelector('#atmosphere-layer video');
+            if (vid) {
+                vid.playbackRate = mediaSpeed;
+                vid.muted = isMuted;
+                vid.volume = vol;
+            }
+
+            const iframe = document.querySelector('#atmosphere-layer iframe');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'setPlaybackRate', args: [mediaSpeed] }), '*');
+                if (isMuted) {
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'mute', args: [] }), '*');
+                } else {
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'unMute', args: [] }), '*');
+                    iframe.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'setVolume', args: [Math.round(vol * 100)] }), '*');
+                }
+            }
+        };
+
+        window.resetAtmoFraming = () => {
+            state.atmoFit = 'cover'; state.atmoScale = 1; state.atmoPosX = 0; state.atmoPosY = 0; state.atmoMediaSpeed = 1;
+            if(document.getElementById('atmo-fit')) document.getElementById('atmo-fit').value = 'cover';
+            if(document.getElementById('atmo-scale')) { document.getElementById('atmo-scale').value = 1; if(document.getElementById('atmo-scale-val')) document.getElementById('atmo-scale-val').innerText = '100%'; }
+            if(document.getElementById('atmo-pos-x')) { document.getElementById('atmo-pos-x').value = 0; if(document.getElementById('atmo-posx-val')) document.getElementById('atmo-posx-val').innerText = '0px'; }
+            if(document.getElementById('atmo-pos-y')) { document.getElementById('atmo-pos-y').value = 0; if(document.getElementById('atmo-posy-val')) document.getElementById('atmo-posy-val').innerText = '0px'; }
+            if(document.getElementById('atmo-media-speed')) { document.getElementById('atmo-media-speed').value = 1; if(document.getElementById('atmo-mspeed-val')) document.getElementById('atmo-mspeed-val').innerText = '1x'; }
+            saveToStorage();
+            applyAtmosphere();
+        };
+
+        window.updateAtmosphereSettings = () => {
+            if(document.getElementById('atmo-dim')) state.atmoDim = document.getElementById('atmo-dim').value;
+            if(document.getElementById('atmo-blur')) state.atmoBlur = document.getElementById('atmo-blur').value;
+            if(document.getElementById('atmo-fit')) state.atmoFit = document.getElementById('atmo-fit').value;
+            if(document.getElementById('atmo-scale')) state.atmoScale = parseFloat(document.getElementById('atmo-scale').value) || 1;
+            if(document.getElementById('atmo-pos-x')) state.atmoPosX = parseInt(document.getElementById('atmo-pos-x').value) || 0;
+            if(document.getElementById('atmo-pos-y')) state.atmoPosY = parseInt(document.getElementById('atmo-pos-y').value) || 0;
+            if(document.getElementById('atmo-media-speed')) state.atmoMediaSpeed = parseFloat(document.getElementById('atmo-media-speed').value) || 1;
+            if(document.getElementById('atmo-unmute')) state.atmoMuted = !document.getElementById('atmo-unmute').checked;
+            if(document.getElementById('atmo-vol')) state.atmoVol = parseFloat(document.getElementById('atmo-vol').value) || 0.5;
+            
+            saveToStorage();
+            applyAtmosphere();
+            applyMediaAttributes();
+        };
+
+        window.renderAtmoVideoList = () => {
+            const list = document.getElementById('atmo-video-list');
+            if(!list) return;
+            if(!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
+            
+            list.innerHTML = state.atmoVideoLibrary.map(v => {
+                const isSelected = state.atmoVideoUrl === v.url;
+                return `<div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-color); padding:4px 8px; border-radius:4px; border:${isSelected ? '1px solid var(--accent-color)' : '1px solid transparent'};">
+                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; font-weight:${isSelected ? 'bold' : 'normal'}; color:${isSelected ? 'var(--accent-color)' : 'var(--text-color)'};" title="${v.url}">${v.name || 'Unnamed Media'}</span>
+                    <div style="display:flex; gap:4px;">
+                        <button class="btn btn-secondary" onclick="selectAtmoVideo('${v.url}')" style="font-size:10px; padding:2px 6px;">${isSelected ? '✓ Active' : '▶️ Play'}</button>
+                        <button class="btn btn-secondary" onclick="editAtmoVideo('${v.id}')" style="font-size:10px; padding:2px 5px;" title="Edit Preset">✏️</button>
+                        <button class="btn btn-secondary" onclick="deleteAtmoVideo('${v.id}')" style="font-size:10px; padding:2px 5px; color:#ff5555;" title="Delete Preset">&times;</button>
+                    </div>
+                </div>`;
+            }).join('');
+        };
+
+        window.addAtmoVideo = () => {
+            const nameEl = document.getElementById('atmo-vid-name');
+            const urlEl = document.getElementById('atmo-vid-url');
+            if(!urlEl || !urlEl.value.trim()) return alert('Please enter a valid media URL.');
+            
+            if(!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
+            const newVid = { id: 'v_' + Date.now(), name: nameEl.value.trim() || 'My Media', url: urlEl.value.trim() };
+            state.atmoVideoLibrary.unshift(newVid);
+            state.atmoVideoUrl = newVid.url;
+            nameEl.value = ''; urlEl.value = '';
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+
+        window.selectAtmoVideo = (url) => {
+            state.atmoVideoUrl = url;
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+
+        window.editAtmoVideo = (id) => {
+            const vid = state.atmoVideoLibrary.find(v => v.id === id);
+            if(!vid) return;
+            const newName = prompt('Edit preset name:', vid.name);
+            if(newName === null) return;
+            const newUrl = prompt('Edit media URL:', vid.url);
+            if(newUrl === null || !newUrl.trim()) return;
+            vid.name = newName.trim() || 'My Media';
+            vid.url = newUrl.trim();
+            if(state.atmoVideoUrl === vid.url) state.atmoVideoUrl = vid.url;
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+
+        window.deleteAtmoVideo = (id) => {
+            if(!confirm('Delete this media preset?')) return;
+            state.atmoVideoLibrary = state.atmoVideoLibrary.filter(v => v.id !== id);
+            if(state.atmoVideoLibrary.length > 0 && !state.atmoVideoLibrary.some(v => v.url === state.atmoVideoUrl)) {
+                state.atmoVideoUrl = state.atmoVideoLibrary[0].url;
+            }
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+
+        window.applyAtmosphere = () => {
+            const mode = state.atmoMode || 'solid';
+            const layer = document.getElementById('atmosphere-layer');
+            if(!layer) return;
+
+            // Sync UI Buttons & Views
+            ['solid', 'video'].forEach(m => {
+                const btn = document.getElementById('atmo-btn-' + m);
+                if(btn) btn.classList.toggle('active', m === mode);
+            });
+            const vidView = document.getElementById('atmo-view-video');
+            const filtView = document.getElementById('atmo-view-filters');
+            const mediaCtrl = document.getElementById('atmo-media-controls');
+            
+            if(vidView) { vidView.style.display = mode === 'video' ? 'flex' : 'none'; if(mode === 'video') renderAtmoVideoList(); }
+            if(filtView) filtView.style.display = mode !== 'solid' ? 'flex' : 'none';
+            if(mediaCtrl) mediaCtrl.style.display = mode === 'video' ? 'flex' : 'none';
+
+            // Sync Sliders & Dropdowns with state
+            if(document.getElementById('atmo-dim')) document.getElementById('atmo-dim').value = state.atmoDim !== undefined ? state.atmoDim : '0.6';
+            if(document.getElementById('atmo-blur')) document.getElementById('atmo-blur').value = state.atmoBlur || '5px';
+            if(document.getElementById('atmo-fit')) document.getElementById('atmo-fit').value = state.atmoFit || 'cover';
+            if(document.getElementById('atmo-scale')) {
+                const scl = state.atmoScale || 1;
+                document.getElementById('atmo-scale').value = scl;
+                if(document.getElementById('atmo-scale-val')) document.getElementById('atmo-scale-val').innerText = Math.round(scl * 100) + '%';
+            }
+            if(document.getElementById('atmo-pos-x')) {
+                const px = state.atmoPosX || 0;
+                document.getElementById('atmo-pos-x').value = px;
+                if(document.getElementById('atmo-posx-val')) document.getElementById('atmo-posx-val').innerText = px + 'px';
+            }
+            if(document.getElementById('atmo-pos-y')) {
+                const py = state.atmoPosY || 0;
+                document.getElementById('atmo-pos-y').value = py;
+                if(document.getElementById('atmo-posy-val')) document.getElementById('atmo-posy-val').innerText = py + 'px';
+            }
+            if(document.getElementById('atmo-media-speed')) {
+                const mSpd = state.atmoMediaSpeed || 1;
+                document.getElementById('atmo-media-speed').value = mSpd;
+                if(document.getElementById('atmo-mspeed-val')) document.getElementById('atmo-mspeed-val').innerText = mSpd + 'x';
+            }
+            if(document.getElementById('atmo-unmute')) {
+                document.getElementById('atmo-unmute').checked = !state.atmoMuted;
+            }
+            if(document.getElementById('atmo-vol')) {
+                const vol = state.atmoVol !== undefined ? state.atmoVol : 0.5;
+                document.getElementById('atmo-vol').value = vol;
+                if(document.getElementById('atmo-vol-val')) document.getElementById('atmo-vol-val').innerText = Math.round(vol * 100) + '%';
+            }
+
+            if(mode === 'solid') { 
+                layer.innerHTML = ''; layer.style.background = 'transparent'; layer.dataset.url = ''; 
+                render(); return; 
+            }
+
+            const dimOpacity = state.atmoDim !== undefined ? state.atmoDim : '0.6';
+            const blurAmt = state.atmoBlur || '5px';
+            const fit = state.atmoFit || 'cover';
+            const scale = state.atmoScale || 1;
+            const posX = state.atmoPosX || 0;
+            const posY = state.atmoPosY || 0;
+            const isMuted = state.atmoMuted === undefined ? true : state.atmoMuted;
+            
+            const transformStyle = `translate(calc(-50% + ${posX}px), calc(-50% + ${posY}px)) scale(${scale})`;
+
+            // --- Real-Time Non-Destructive Update Check ---
+            const currentUrl = state.atmoVideoUrl || (state.atmoVideoLibrary && state.atmoVideoLibrary[0] ? state.atmoVideoLibrary[0].url : '');
+            const existingMedia = document.getElementById('atmo-media-el');
+            const existingOverlay = document.getElementById('atmo-overlay');
+
+            if (existingMedia && existingOverlay && layer.dataset.url === currentUrl && layer.dataset.mode === mode) {
+                existingOverlay.style.background = `rgba(0,0,0,${dimOpacity})`;
+                existingOverlay.style.backdropFilter = `blur(${blurAmt})`;
+                existingMedia.style.transform = transformStyle;
+                
+                if (existingMedia.tagName.toLowerCase() === 'img' || existingMedia.tagName.toLowerCase() === 'video') {
+                    existingMedia.style.objectFit = fit;
+                }
+                applyMediaAttributes();
+                render(); 
+                return;
+            }
+
+            // Rebuild the layer for new media:
+            layer.innerHTML = '';
+            layer.dataset.mode = mode;
+            layer.dataset.url = currentUrl;
+
+            const overlay = `<div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s;"></div>`;
+
+            if(mode === 'video') {
+                let url = currentUrl;
+                if(!url) return;
+                
+                let content = '';
+                const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
+                
+                const isImage = /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
+                const isVideo = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url);
+
+                const baseStyle = `width:100vw; height:100vh; position:absolute; top:50%; left:50%; transform:${transformStyle}; z-index:1; pointer-events:none; user-select:none; transition:transform 0.05s ease-out, object-fit 0.1s;`;
+
+                if(ytMatch && ytMatch[1]) {
+                    const vidId = ytMatch[1];
+                    content = `<div id="atmo-media-el" style="${baseStyle} overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="width:100vw; height:56.25vw; min-height:100vh; min-width:177.77vh; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); border:none; pointer-events:none;" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
+                } else if(isImage) {
+                    content = `<img id="atmo-media-el" src="${url}" style="${baseStyle} object-fit:${fit};">`;
+                } else if(isVideo) {
+                    content = `<video id="atmo-media-el" src="${url}" autoplay loop ${isMuted ? 'muted' : ''} playsinline style="${baseStyle} object-fit:${fit};" oncanplay="applyMediaAttributes()"></video>`;
+                } else {
+                    content = `<iframe id="atmo-media-el" src="${url}" style="${baseStyle} border:none;" onload="applyMediaAttributes()"></iframe>`;
+                }
+                layer.innerHTML = content + overlay;
+                setTimeout(applyMediaAttributes, 150);
+            }
+            render();
+        };
 		
 		// --- Universal Inline Tray & Infinite Pop-Out Engine ---
         window.getMediaType = (url) => {
