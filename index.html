@@ -684,12 +684,18 @@
                     <div class="segmented-btn" id="atmo-btn-video" onclick="switchAtmoMode('video')">Video & Media Library</div>
                 </div>
 
-                <!-- Video Library Manager -->
+                <!-- Video Library Manager (2-Row Layout Fix) -->
                 <div id="atmo-view-video" style="display:none; flex-direction:column; gap:8px; background:var(--ruler-bg); padding:10px; border-radius:6px; margin-bottom:10px; border:1px solid var(--input-border);">
                     <div style="display:flex; gap:6px;">
-                        <input type="text" id="atmo-vid-name" placeholder="Preset Name (e.g. Lofi Girl)" style="flex:1; font-size:12px;">
-                        <input type="text" id="atmo-vid-url" placeholder="YouTube, MP4, GIF, or Image URL..." style="flex:2; font-size:12px;">
-                        <button class="btn btn-primary" onclick="addAtmoVideo()" style="font-size:11px; padding:4px 8px;">+ Save</button>
+                        <input type="text" id="atmo-vid-name" placeholder="Preset Name (e.g. Lofi Girl)" style="flex:1; font-size:12px; min-width:0;">
+                        <input type="text" id="atmo-vid-url" placeholder="YouTube, MP4, GIF, or Image URL..." style="flex:2; font-size:12px; min-width:0;">
+                    </div>
+                    <div style="display:flex; gap:6px;">
+                        <button class="btn btn-primary" onclick="addAtmoVideo()" style="flex:1; font-size:11px; padding:6px;">+ Save Web URL</button>
+                        <label class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px; cursor:pointer; margin:0; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px;" title="Load local video or image from your computer (Active Session Only)">
+                            📁 Load Local File
+                            <input type="file" id="atmo-local-file" accept="video/*,image/*" style="display:none;" onchange="loadLocalAtmoMedia(event)">
+                        </label>
                     </div>
                     <div id="atmo-video-list" style="max-height:140px; overflow-y:auto; display:flex; flex-direction:column; gap:4px; margin-top:4px; border-top:1px solid var(--input-border); padding-top:6px;"></div>
                 </div>
@@ -2151,16 +2157,29 @@
             }).join('');
         };
 
-        window.addAtmoVideo = () => {
-            const nameEl = document.getElementById('atmo-vid-name');
-            const urlEl = document.getElementById('atmo-vid-url');
-            if(!urlEl || !urlEl.value.trim()) return alert('Please enter a valid media URL.');
+        window.loadLocalAtmoMedia = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             
-            if(!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
-            const newVid = { id: 'v_' + Date.now(), name: nameEl.value.trim() || 'My Media', url: urlEl.value.trim() };
-            state.atmoVideoLibrary.unshift(newVid);
-            state.atmoVideoUrl = newVid.url;
-            nameEl.value = ''; urlEl.value = '';
+            // Create a secure, temporary streaming link for the local file
+            const tempUrl = URL.createObjectURL(file);
+            state.atmoVideoUrl = tempUrl;
+            
+            // Explicitly detect if the file is a video or image!
+            const isVid = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(file.name);
+            const mediaType = isVid ? 'video' : 'image';
+            
+            const cleanName = "📁 [Local] " + (file.name.length > 22 ? file.name.substring(0, 19) + "..." : file.name);
+            
+            if (!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
+            
+            // Remove any previous local session items so the list stays clean
+            state.atmoVideoLibrary = state.atmoVideoLibrary.filter(v => !v.isLocal);
+            
+            // Push the new local file to the top of the library with its explicit mediaType!
+            state.atmoVideoLibrary.unshift({ id: 'local_' + Date.now(), name: cleanName, url: tempUrl, isLocal: true, mediaType: mediaType });
+            
+            e.target.value = '';
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
@@ -2297,8 +2316,12 @@
                 let content = '';
                 const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
                 
-                const isImage = /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
-                const isVideo = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url);
+                // Look up the active preset to see if we explicitly tagged its media type!
+                const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === url);
+                const presetType = activePreset ? activePreset.mediaType : null;
+
+                const isImage = presetType === 'image' || /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
+                const isVideo = presetType === 'video' || /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url) || (url.startsWith('blob:') && !isImage);
 
                 const baseStyle = `width:100vw; height:100vh; position:absolute; top:50%; left:50%; transform:${transformStyle}; z-index:1; pointer-events:none; user-select:none; transition:transform 0.05s ease-out, object-fit 0.1s;`;
 
