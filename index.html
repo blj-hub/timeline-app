@@ -2139,6 +2139,10 @@
             applyMediaAttributes();
         };
 
+        // ============================================================================
+        // --- COMPLETE VIDEO & MEDIA LIBRARY MANAGER SUITE ---
+        // ============================================================================
+
         window.renderAtmoVideoList = () => {
             const list = document.getElementById('atmo-video-list');
             if(!list) return;
@@ -2146,8 +2150,9 @@
             
             list.innerHTML = state.atmoVideoLibrary.map(v => {
                 const isSelected = state.atmoVideoUrl === v.url;
+                const badge = v.isLocal ? '📁 ' : (v.mediaType === 'youtube' ? '📺 ' : (v.mediaType === 'image' ? '🖼️ ' : '🎬 '));
                 return `<div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-color); padding:4px 8px; border-radius:4px; border:${isSelected ? '1px solid var(--accent-color)' : '1px solid transparent'};">
-                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; font-weight:${isSelected ? 'bold' : 'normal'}; color:${isSelected ? 'var(--accent-color)' : 'var(--text-color)'};" title="${v.url}">${v.name || 'Unnamed Media'}</span>
+                    <span style="font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px; font-weight:${isSelected ? 'bold' : 'normal'}; color:${isSelected ? 'var(--accent-color)' : 'var(--text-color)'};" title="${v.url}">${badge}${v.name || 'Unnamed Media'}</span>
                     <div style="display:flex; gap:4px;">
                         <button class="btn btn-secondary" onclick="selectAtmoVideo('${v.url}')" style="font-size:10px; padding:2px 6px;">${isSelected ? '✓ Active' : '▶️ Play'}</button>
                         <button class="btn btn-secondary" onclick="editAtmoVideo('${v.id}')" style="font-size:10px; padding:2px 5px;" title="Edit Preset">✏️</button>
@@ -2157,26 +2162,50 @@
             }).join('');
         };
 
+        // 1. Save Web URLs (+ Save Web URL Button)
+        window.addAtmoVideo = () => {
+            const nameEl = document.getElementById('atmo-vid-name');
+            const urlEl = document.getElementById('atmo-vid-url');
+            if(!urlEl || !urlEl.value.trim()) return alert('Please enter a valid YouTube, video, or image URL.');
+            
+            const url = urlEl.value.trim();
+            const name = nameEl.value.trim() || 'My Web Media';
+            
+            // Smart media type detection for web URLs!
+            let mediaType = 'web';
+            if (/(?:youtu\.be\/|youtube\.com\/)/i.test(url)) mediaType = 'youtube';
+            else if (/(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url)) mediaType = 'image';
+            else if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) mediaType = 'video';
+            
+            if(!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
+            const newVid = { id: 'v_' + Date.now(), name: name, url: url, mediaType: mediaType, isLocal: false };
+            
+            state.atmoVideoLibrary.unshift(newVid);
+            state.atmoVideoUrl = newVid.url;
+            nameEl.value = ''; urlEl.value = '';
+            
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+
+        // 2. Load Local Files (📁 Load Local File Button)
         window.loadLocalAtmoMedia = (e) => {
             const file = e.target.files[0];
             if (!file) return;
             
-            // Create a secure, temporary streaming link for the local file
             const tempUrl = URL.createObjectURL(file);
             state.atmoVideoUrl = tempUrl;
             
-            // Explicitly detect if the file is a video or image!
+            // Explicitly detect if the file is a video or image
             const isVid = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(file.name);
             const mediaType = isVid ? 'video' : 'image';
-            
-            const cleanName = "📁 [Local] " + (file.name.length > 22 ? file.name.substring(0, 19) + "..." : file.name);
+            const cleanName = "[Local] " + (file.name.length > 20 ? file.name.substring(0, 17) + "..." : file.name);
             
             if (!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
             
             // Remove any previous local session items so the list stays clean
             state.atmoVideoLibrary = state.atmoVideoLibrary.filter(v => !v.isLocal);
-            
-            // Push the new local file to the top of the library with its explicit mediaType!
             state.atmoVideoLibrary.unshift({ id: 'local_' + Date.now(), name: cleanName, url: tempUrl, isLocal: true, mediaType: mediaType });
             
             e.target.value = '';
@@ -2185,6 +2214,7 @@
             applyAtmosphere();
         };
 
+        // 3. Play / Activate Preset
         window.selectAtmoVideo = (url) => {
             state.atmoVideoUrl = url;
             saveToStorage();
@@ -2192,26 +2222,43 @@
             applyAtmosphere();
         };
 
+        // 4. Edit Preset Name & URL
         window.editAtmoVideo = (id) => {
             const vid = state.atmoVideoLibrary.find(v => v.id === id);
             if(!vid) return;
+            if(vid.isLocal) return alert("Local file session links cannot be edited. Please load a new file using the 📁 button!");
+            
             const newName = prompt('Edit preset name:', vid.name);
             if(newName === null) return;
             const newUrl = prompt('Edit media URL:', vid.url);
             if(newUrl === null || !newUrl.trim()) return;
+            
             vid.name = newName.trim() || 'My Media';
             vid.url = newUrl.trim();
+            
+            // Re-detect media type if they changed the URL format
+            if (/(?:youtu\.be\/|youtube\.com\/)/i.test(vid.url)) vid.mediaType = 'youtube';
+            else if (/(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(vid.url)) vid.mediaType = 'image';
+            else if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(vid.url)) vid.mediaType = 'video';
+            else vid.mediaType = 'web';
+
             if(state.atmoVideoUrl === vid.url) state.atmoVideoUrl = vid.url;
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
         };
 
+        // 5. Delete Preset
         window.deleteAtmoVideo = (id) => {
             if(!confirm('Delete this media preset?')) return;
+            const target = state.atmoVideoLibrary.find(v => v.id === id);
+            if(target && target.isLocal) URL.revokeObjectURL(target.url); // Clean up memory!
+            
             state.atmoVideoLibrary = state.atmoVideoLibrary.filter(v => v.id !== id);
             if(state.atmoVideoLibrary.length > 0 && !state.atmoVideoLibrary.some(v => v.url === state.atmoVideoUrl)) {
                 state.atmoVideoUrl = state.atmoVideoLibrary[0].url;
+            } else if (state.atmoVideoLibrary.length === 0) {
+                state.atmoVideoUrl = '';
             }
             saveToStorage();
             renderAtmoVideoList();
