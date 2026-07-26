@@ -2334,6 +2334,16 @@
             
             const transformStyle = `translate(calc(-50% + ${posX}px), calc(-50% + ${posY}px)) scale(${scale})`;
 
+            // Helper to calculate exact YouTube iframe styles based on Fit Mode!
+            const getYtStyle = (fitMode) => {
+                const base = `position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); border:none; pointer-events:none;`;
+                if (fitMode === 'contain') return `width:100%; height:100%; max-width:calc((100vh - 50px) * 1.7777); max-height:56.25vw; aspect-ratio:16/9; ${base}`;
+                if (fitMode === 'fill') return `width:100%; height:100%; ${base}`;
+                if (fitMode === 'none') return `width:1920px; height:1080px; ${base}`;
+                // Cover (Default): Calculates against actual workspace height below the 50px ruler!
+                return `width:100vw; height:56.25vw; min-height:100%; min-width:calc((100vh - 50px) * 1.7777); ${base}`;
+            };
+
             // --- Real-Time Non-Destructive Update Check ---
             const currentUrl = state.atmoVideoUrl || (state.atmoVideoLibrary && state.atmoVideoLibrary[0] ? state.atmoVideoLibrary[0].url : '');
             const existingMedia = document.getElementById('atmo-media-el');
@@ -2346,6 +2356,10 @@
                 
                 if (existingMedia.tagName.toLowerCase() === 'img' || existingMedia.tagName.toLowerCase() === 'video') {
                     existingMedia.style.objectFit = fit;
+                } else {
+                    // Dynamically update YouTube iframe styling when Fit Mode changes!
+                    const iframe = existingMedia.querySelector('iframe');
+                    if (iframe) iframe.style.cssText = getYtStyle(fit);
                 }
                 applyMediaAttributes();
                 render(); 
@@ -2366,19 +2380,17 @@
                 let content = '';
                 const ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/i);
                 
-                // Look up the active preset to see if we explicitly tagged its media type!
                 const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === url);
                 const presetType = activePreset ? activePreset.mediaType : null;
 
                 const isImage = presetType === 'image' || /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
                 const isVideo = presetType === 'video' || /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url) || (url.startsWith('blob:') && !isImage);
 
-                // Using 100% instead of 100vh ensures it respects the container below the 50px ruler!
                 const baseStyle = `width:100vw; height:100%; position:absolute; top:50%; left:50%; transform:${transformStyle}; z-index:1; pointer-events:none; user-select:none; transition:transform 0.05s ease-out, object-fit 0.1s;`;
 
                 if(ytMatch && ytMatch[1]) {
                     const vidId = ytMatch[1];
-                    content = `<div id="atmo-media-el" style="${baseStyle} overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="width:100vw; height:56.25vw; min-height:100%; min-width:177.77vh; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); border:none; pointer-events:none;" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
+                    content = `<div id="atmo-media-el" style="${baseStyle} display:flex; justify-content:center; align-items:center; overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="${getYtStyle(fit)}" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
                 } else if(isImage) {
                     content = `<img id="atmo-media-el" src="${url}" style="${baseStyle} object-fit:${fit};">`;
                 } else if(isVideo) {
