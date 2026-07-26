@@ -257,12 +257,14 @@
                 </div>
             </div>
             <div class="btn-row" style="margin-top:8px; align-items: center;">
+                <button class="floating-btn secondary circle-btn" id="btn-atmo-unlock" onclick="toggleAtmoInteractive()" title="Unlock Background Interactivity" style="display: none; width: 34px; height: 34px; border-radius: 50%; justify-content: center; align-items: center; font-size: 14px;">🔒</button>
                 <button class="floating-btn secondary circle-btn" id="btn-calendar-jump" onclick="openCalendarTool()" title="Jump to Date" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 14px;">📅</button>
-<button class="floating-btn secondary circle-btn" id="btn-now-line-toggle" onclick="toggleNowLine()" title="Toggle 'Now' Line marker" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-family: sans-serif; font-size: 16px;">I</button>
+                <button class="floating-btn secondary circle-btn" id="btn-now-line-toggle" onclick="toggleNowLine()" title="Toggle 'Now' Line marker" style="width: 34px; height: 34px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; font-family: sans-serif; font-size: 16px;">I</button>
                 <button class="floating-btn secondary" id="btn-layouts" onclick="openLayoutsModal()">Layouts</button>
                 <button class="floating-btn secondary" id="btn-theme-settings">Theme & Sync</button>
                 <button class="floating-btn" id="btn-snap-now">Snap to Now</button>
             </div>
+			
         </div>
         <div id="instructions"><strong>Dbl-click</strong> empty space to add • Pinch to Zoom • Hover over backgrounds for Edit options</div>
     </div>
@@ -673,7 +675,6 @@
         </div>
 
         <!-- THEME SETTINGS & SYNC MODAL -->
-        <!-- THEME SETTINGS & SYNC MODAL -->
         <div class="modal-window" id="modal-theme">
             <div class="modal-header"><h3>Theme & Sync Settings</h3><button class="close-btn" onclick="closeModal()">&times;</button></div>
             <div class="modal-body">
@@ -692,6 +693,7 @@
                     </div>
                     <div style="display:flex; gap:6px;">
                         <button class="btn btn-primary" onclick="addAtmoVideo()" style="flex:1; font-size:11px; padding:6px;">+ Save Web URL</button>
+                        <button class="btn btn-secondary" onclick="quickPlayAtmoVideo()" style="flex:1; font-size:11px; padding:6px;" title="Play entered link immediately in background without saving">▶️ Play Link</button>
                         <label class="btn btn-secondary" style="flex:1; font-size:11px; padding:6px; cursor:pointer; margin:0; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px;" title="Load local video or image from your computer (Active Session Only)">
                             📁 Load Local File
                             <input type="file" id="atmo-local-file" accept="video/*,image/*" style="display:none;" onchange="loadLocalAtmoMedia(event)">
@@ -2083,7 +2085,53 @@
 		};
 		
 		// --- Consolidated Live Backgrounds & Video Library Engine ---
-        window.switchAtmoMode = (mode) => {
+        // --- Interactive Background Lock/Unlock Engine ---
+        window.updateAtmoInteractivity = () => {
+            const isLive = state.atmoMode && state.atmoMode !== 'solid';
+            if (!isLive) state.atmoInteractive = false;
+
+            const unlockBtn = document.getElementById('btn-atmo-unlock');
+            if (unlockBtn) {
+                unlockBtn.style.display = isLive ? 'flex' : 'none';
+                unlockBtn.innerText = state.atmoInteractive ? '🔓' : '🔒';
+                unlockBtn.title = state.atmoInteractive ? 'Lock Background (Click to restore timeline dragging)' : 'Unlock Background (Click to interact with video or website)';
+                unlockBtn.style.background = state.atmoInteractive ? 'var(--accent-color)' : 'var(--btn-sec-bg)';
+                unlockBtn.style.color = state.atmoInteractive ? '#fff' : 'var(--btn-sec-text)';
+            }
+
+            const layer = document.getElementById('atmosphere-layer');
+            if (!layer) return;
+
+            if (state.atmoInteractive && isLive) {
+                layer.style.zIndex = '5';
+                layer.style.pointerEvents = 'auto';
+                const mediaEl = document.getElementById('atmo-media-el');
+                if (mediaEl) {
+                    mediaEl.style.pointerEvents = 'auto';
+                    mediaEl.style.userSelect = 'auto';
+                    const innerIframe = mediaEl.querySelector('iframe, video, img');
+                    if (innerIframe) innerIframe.style.pointerEvents = 'auto';
+                }
+            } else {
+                layer.style.zIndex = '0';
+                layer.style.pointerEvents = 'none';
+                const mediaEl = document.getElementById('atmo-media-el');
+                if (mediaEl) {
+                    mediaEl.style.pointerEvents = 'none';
+                    mediaEl.style.userSelect = 'none';
+                    const innerIframe = mediaEl.querySelector('iframe, video, img');
+                    if (innerIframe) innerIframe.style.pointerEvents = 'none';
+                }
+            }
+        };
+
+        window.toggleAtmoInteractive = () => {
+            state.atmoInteractive = !state.atmoInteractive;
+            saveToStorage();
+            updateAtmoInteractivity();
+        };
+		
+		window.switchAtmoMode = (mode) => {
             state.atmoMode = mode;
             updateAtmosphereSettings();
         };
@@ -2186,6 +2234,20 @@
             state.atmoVideoLibrary.unshift(newVid);
             state.atmoVideoUrl = newVid.url;
             nameEl.value = ''; urlEl.value = '';
+            
+            saveToStorage();
+            renderAtmoVideoList();
+            applyAtmosphere();
+        };
+		
+		// Quick Play Web URL without saving to preset library
+        window.quickPlayAtmoVideo = () => {
+            const urlEl = document.getElementById('atmo-vid-url');
+            if(!urlEl || !urlEl.value.trim()) return alert('Please enter a valid YouTube, video, or image URL.');
+            
+            const url = urlEl.value.trim();
+            state.atmoMode = 'video';
+            state.atmoVideoUrl = url;
             
             saveToStorage();
             renderAtmoVideoList();
@@ -2321,6 +2383,7 @@
 
             if(mode === 'solid') { 
                 layer.innerHTML = ''; layer.style.background = 'transparent'; layer.dataset.url = ''; 
+                updateAtmoInteractivity();
                 render(); return; 
             }
 
@@ -2340,7 +2403,6 @@
                 if (fitMode === 'contain') return `width:100%; height:100%; max-width:calc((100vh - 50px) * 1.7777); max-height:56.25vw; aspect-ratio:16/9; ${base}`;
                 if (fitMode === 'fill') return `width:100%; height:100%; ${base}`;
                 if (fitMode === 'none') return `width:1920px; height:1080px; ${base}`;
-                // Cover (Default): Calculates against actual workspace height below the 50px ruler!
                 return `width:100vw; height:56.25vw; min-height:100%; min-width:calc((100vh - 50px) * 1.7777); ${base}`;
             };
 
@@ -2357,11 +2419,11 @@
                 if (existingMedia.tagName.toLowerCase() === 'img' || existingMedia.tagName.toLowerCase() === 'video') {
                     existingMedia.style.objectFit = fit;
                 } else {
-                    // Dynamically update YouTube iframe styling when Fit Mode changes!
                     const iframe = existingMedia.querySelector('iframe');
                     if (iframe) iframe.style.cssText = getYtStyle(fit);
                 }
                 applyMediaAttributes();
+                updateAtmoInteractivity();
                 render(); 
                 return;
             }
@@ -2399,9 +2461,13 @@
                     content = `<iframe id="atmo-media-el" src="${url}" style="${baseStyle} border:none;" onload="applyMediaAttributes()"></iframe>`;
                 }
                 layer.innerHTML = content + overlay;
-                setTimeout(applyMediaAttributes, 150);
+                setTimeout(() => {
+                    applyMediaAttributes();
+                    updateAtmoInteractivity();
+                }, 150);
             }
             render();
+            updateAtmoInteractivity();
         };
 		
 		// --- Universal Inline Tray & Infinite Pop-Out Engine ---
@@ -2561,6 +2627,16 @@
             });
         };
 
+        // Background Player Trigger for Any Saved Link
+        window.playUrlAsBackground = (url) => {
+            if (!url || !url.trim()) return;
+            state.atmoMode = 'video';
+            state.atmoVideoUrl = url.trim();
+            saveToStorage();
+            applyAtmosphere();
+        };
+
+        // Universal Action Button Generator for Links (Projects, Todos, Lists)
         window.getLinkActionButtons = (item) => {
             if (!item.url || !item.url.trim()) return { btns: '', tray: '' };
             const isOpen = state.expandedInline && state.expandedInline[item.id];
@@ -2569,8 +2645,9 @@
             
             const inlineBtn = `<button class="btn ${isOpen ? 'btn-secondary' : ''}" style="padding:2px 6px; font-size:12px; margin-right:2px; ${isOpen ? '' : 'background:transparent; border:none; box-shadow:none; opacity:0.7;'}" onclick="toggleInlineTray('${item.id}')" title="Toggle Inline Tray">🔽</button>`;
             const popOutBtn = `<button class="btn" style="padding:2px 6px; font-size:12px; margin-right:2px; background:transparent; border:none; box-shadow:none; opacity:0.7;" onclick="spawnPopOutWindow('${safeTitle}', '${safeUrl}')" title="Pop Out in Floating Window">🗖</button>`;
+            const playBgBtn = `<button class="btn" style="padding:2px 6px; font-size:12px; margin-right:2px; background:transparent; border:none; box-shadow:none; opacity:0.7;" onclick="playUrlAsBackground('${safeUrl}')" title="Play as Live Background">📺</button>`;
             
-            const btns = inlineBtn + popOutBtn;
+            const btns = inlineBtn + popOutBtn + playBgBtn;
             const tray = isOpen ? `<div style="width:100%; display:flex; justify-content:center; margin-top:8px; background:var(--ruler-bg); padding:8px; border-radius:6px; border:1px solid var(--input-border);">${getMediaContentHTML(item.url)}</div>` : '';
             
             return { btns, tray };
