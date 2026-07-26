@@ -220,7 +220,7 @@
 <body>
 
     <div id="app">
-        <div id="atmosphere-layer" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:0; pointer-events:none; overflow:hidden; background:transparent;"></div>
+        <div id="atmosphere-layer" style="position:fixed; top:50px; left:0; width:100vw; height:calc(100vh - 50px); z-index:0; pointer-events:none; overflow:hidden; background:transparent;"></div>
         <canvas id="timeline-canvas"></canvas>
         <div id="events-container"></div>
         <div id="now-line"></div>
@@ -755,7 +755,7 @@
                         </label>
                         <div class="form-row" style="align-items:center;">
                             <label style="flex:1; font-size:12px;">Media Volume:</label>
-                            <input type="range" id="atmo-vol" min="0" max="1" step="0.05" value="0.5" oninput="document.getElementById('atmo-vol-val').innerText = Math.round(this.value * 100) + '%'; updateAtmosphereSettings();" style="flex:2;">
+                            <input type="range" id="atmo-vol" min="0" max="1" step="0.01" value="0.5" oninput="document.getElementById('atmo-vol-val').innerText = Math.round(this.value * 100) + '%'; updateAtmosphereSettings();" style="flex:2;">
                             <span id="atmo-vol-val" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">50%</span>
                         </div>
                         <div class="form-row" style="align-items:center;">
@@ -2132,7 +2132,10 @@
             if(document.getElementById('atmo-pos-y')) state.atmoPosY = parseInt(document.getElementById('atmo-pos-y').value) || 0;
             if(document.getElementById('atmo-media-speed')) state.atmoMediaSpeed = parseFloat(document.getElementById('atmo-media-speed').value) || 1;
             if(document.getElementById('atmo-unmute')) state.atmoMuted = !document.getElementById('atmo-unmute').checked;
-            if(document.getElementById('atmo-vol')) state.atmoVol = parseFloat(document.getElementById('atmo-vol').value) || 0.5;
+            if(document.getElementById('atmo-vol')) {
+                const volVal = parseFloat(document.getElementById('atmo-vol').value);
+                state.atmoVol = !isNaN(volVal) ? volVal : 0.5;
+            }
             
             saveToStorage();
             applyAtmosphere();
@@ -2370,11 +2373,12 @@
                 const isImage = presetType === 'image' || /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
                 const isVideo = presetType === 'video' || /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url) || (url.startsWith('blob:') && !isImage);
 
-                const baseStyle = `width:100vw; height:100vh; position:absolute; top:50%; left:50%; transform:${transformStyle}; z-index:1; pointer-events:none; user-select:none; transition:transform 0.05s ease-out, object-fit 0.1s;`;
+                // Using 100% instead of 100vh ensures it respects the container below the 50px ruler!
+                const baseStyle = `width:100vw; height:100%; position:absolute; top:50%; left:50%; transform:${transformStyle}; z-index:1; pointer-events:none; user-select:none; transition:transform 0.05s ease-out, object-fit 0.1s;`;
 
                 if(ytMatch && ytMatch[1]) {
                     const vidId = ytMatch[1];
-                    content = `<div id="atmo-media-el" style="${baseStyle} overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="width:100vw; height:56.25vw; min-height:100vh; min-width:177.77vh; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); border:none; pointer-events:none;" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
+                    content = `<div id="atmo-media-el" style="${baseStyle} overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="width:100vw; height:56.25vw; min-height:100%; min-width:177.77vh; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); border:none; pointer-events:none;" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
                 } else if(isImage) {
                     content = `<img id="atmo-media-el" src="${url}" style="${baseStyle} object-fit:${fit};">`;
                 } else if(isVideo) {
