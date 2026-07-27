@@ -2493,15 +2493,13 @@
             const maxH = isPopOut ? '100%' : '400px';
             
             if (type === 'drawio') {
-                // Smart URL converter: Automatically injects ?embed=1 to bypass X-Frame-Options blocks!
+                // Uses embed.diagrams.net and adds &onedrive=1 to enable cloud saving!
                 let embedUrl = url.trim();
                 if (embedUrl.includes('diagrams.net') || embedUrl.includes('draw.io')) {
                     const hashIdx = embedUrl.indexOf('#');
                     const hashPart = hashIdx > -1 ? embedUrl.substring(hashIdx) : '';
-                    // Routes through official embed engine while preserving your OneDrive file ID (#W...)
-                    embedUrl = `https://app.diagrams.net/?embed=1&ui=dark&spin=1${hashPart}`;
+                    embedUrl = `https://embed.diagrams.net/?embed=1&ui=dark&spin=1&onedrive=1${hashPart}`;
                 }
-                // Added allow="popups" so Microsoft OneDrive login screens can open securely!
                 return `<iframe src="${embedUrl}" width="100%" height="${isPopOut ? '100%' : '450px'}" frameborder="0" allowfullscreen allow="popups popups-to-escape-sandbox clipboard-read clipboard-write fullscreen" style="border-radius:4px; background:var(--bg-color); border:none; min-height:${isPopOut ? '300px' : '450px'};"></iframe>`;
             } else if (type === 'image') {
                 return `<div style="width:100%; height:${isPopOut ? '100%' : 'auto'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; border-radius:4px;">
@@ -2573,9 +2571,9 @@
             });
         };
 
-        // Upgraded Top Bar Launcher with ?embed=1 flag included!
+        // Upgraded Top Bar Launcher using embed.diagrams.net + onedrive=1!
         window.openDrawioWorkspace = () => {
-            spawnPopOutWindow('🎨 Draw.io Workspace', 'https://app.diagrams.net/?embed=1&ui=dark&spin=1', 850, 600);
+            spawnPopOutWindow('🎨 Draw.io Workspace', 'https://embed.diagrams.net/?embed=1&ui=dark&spin=1&onedrive=1', 850, 600);
         };
 
         // Background Player Trigger for Any Saved Link
