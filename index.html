@@ -522,14 +522,14 @@
                 <div class="segmented-btn" id="music-tab-radio" onclick="switchMusicTab('radio')">Radio Streams</div>
             </div>
             <div id="view-music-embed" style="flex:1; display:flex; flex-direction:column; gap:10px;">
-                <div class="hide-in-mini hide-frameless" style="display:flex; justify-content:space-between; align-items: center;"><span style="font-size: 12px; color: var(--text-secondary);">Save iframe codes (YouTube, Spotify, etc.)</span></div>
+                <div class="hide-in-mini hide-frameless" style="display:flex; justify-content:space-between; align-items: center;"><span style="font-size: 12px; color: var(--text-secondary);">Save YouTube/Spotify URLs or HTML iframe codes</span></div>
                 <div class="split-layout" style="flex:1; min-height: 150px;">
                     <div class="sidebar-left hide-in-mini hide-frameless" id="embed-sidebar"></div>
                     <div class="content-right" style="gap:10px; flex:1;">
-                        <div class="form-row hide-in-mini hide-frameless" id="embed-quick-play"><input type="text" id="inp-embed-quick" placeholder="Quick play: Paste <iframe...> code here" style="flex:1;"><button class="btn btn-primary" onclick="playQuickEmbed()">Play</button></div>
-                        <div class="form-row hide-in-mini hide-frameless" id="embed-add-row" style="display:none;"><input type="text" id="inp-embed-name" placeholder="Name" style="flex:1;"><input type="text" id="inp-embed-code" placeholder="Paste <iframe...> code" style="flex:2;"><button class="btn btn-primary" onclick="addMusicEmbed()">Save</button></div>
+                        <div class="form-row hide-in-mini hide-frameless" id="embed-quick-play"><input type="text" id="inp-embed-quick" placeholder="Quick play: Paste YouTube/Spotify URL or <iframe...> code" style="flex:1;"><button class="btn btn-primary" onclick="playQuickEmbed()">Play</button></div>
+                        <div class="form-row hide-in-mini hide-frameless" id="embed-add-row" style="display:none;"><input type="text" id="inp-embed-name" placeholder="Name" style="flex:1;"><input type="text" id="inp-embed-code" placeholder="Paste URL or <iframe...> code" style="flex:2;"><button class="btn btn-primary" onclick="addMusicEmbed()">Save</button></div>
                         <div id="embed-list-container" class="hide-in-mini hide-frameless" style="flex:1; overflow-y:auto; padding-right:5px;"></div>
-                        <div id="music-embed-container" style="background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; display:flex; justify-content:center; align-items:center;"><span style="color:var(--text-secondary); font-size:12px;">Select an embed to play</span></div>
+                        <div id="music-embed-container" style="background:var(--input-bg); border:1px solid var(--input-border); border-radius:6px; display:flex; justify-content:center; align-items:center;"><span style="color:var(--text-secondary); font-size:12px;">Select an embed or URL to play</span></div>
                     </div>
                 </div>
                 <div id="music-new-embed-tab-wrap" class="hide-in-mini hide-frameless" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="addEmbedTab()">+ New Tab</button></div>
@@ -2452,11 +2452,11 @@
 
                 if(ytMatch && ytMatch[1]) {
                     const vidId = ytMatch[1];
-                    content = `<div id="atmo-media-el" style="${baseStyle} display:flex; justify-content:center; align-items:center; overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=0&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="${getYtStyle(fit)}" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
+                    content = `<div id="atmo-media-el" style="${baseStyle} display:flex; justify-content:center; align-items:center; overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=1&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="${getYtStyle(fit)}" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
                 } else if(isImage) {
                     content = `<img id="atmo-media-el" src="${url}" style="${baseStyle} object-fit:${fit};">`;
                 } else if(isVideo) {
-                    content = `<video id="atmo-media-el" src="${url}" autoplay loop ${isMuted ? 'muted' : ''} playsinline style="${baseStyle} object-fit:${fit};" oncanplay="applyMediaAttributes()"></video>`;
+                    content = `<video id="atmo-media-el" src="${url}" autoplay loop controls ${isMuted ? 'muted' : ''} playsinline style="${baseStyle} object-fit:${fit};" oncanplay="applyMediaAttributes()"></video>`;
                 } else {
                     content = `<iframe id="atmo-media-el" src="${url}" style="${baseStyle} border:none;" onload="applyMediaAttributes()"></iframe>`;
                 }
@@ -3077,10 +3077,33 @@ bDays.forEach(b => {
         window.deleteEmbedTab = (tab) => { if(confirm(`Delete tab '${tab}' and all embeds inside?`)) { state.musicEmbedTabs = state.musicEmbedTabs.filter(t=>t!==tab); state.musicEmbeds = state.musicEmbeds.filter(e=>e.tab!==tab); state.activeMusicEmbedTab = state.musicEmbedTabs[0] || 'Favorites'; saveToStorage(); window.renderMusic(); } };
         
         window.playQuickEmbed = () => {
-            const val = document.getElementById('inp-embed-quick').value;
+            const val = document.getElementById('inp-embed-quick').value.trim();
             const container = document.getElementById('music-embed-container');
-            if (val.trim().toLowerCase().startsWith('<iframe')) { container.innerHTML = val; }
-            else { container.innerHTML = '<span style="color:var(--now-line); font-size:12px;">Please paste a valid HTML &lt;iframe&gt; code.</span>'; }
+            if (!val) return;
+            
+            // If they pasted raw HTML (like <iframe...), use it directly.
+            // Otherwise, let our smart engine convert the YouTube/Spotify URL automatically!
+            if (val.startsWith('<')) { 
+                container.innerHTML = val; 
+            } else if (/http|www|youtube|spotify|youtu\.be/i.test(val)) {
+                container.innerHTML = getMediaContentHTML(val);
+            } else { 
+                container.innerHTML = '<span style="color:var(--now-line); font-size:12px;">Please paste a valid URL or HTML &lt;iframe&gt; code.</span>'; 
+            }
+        };
+
+        window.playEmbed = (id) => { 
+            const e = state.musicEmbeds.find(x=>x.id===id); 
+            if(!e) return;
+            const container = document.getElementById('music-embed-container');
+            const val = (e.code || '').trim();
+            
+            // Supports both legacy saved iframe codes and standard web URLs!
+            if (val.startsWith('<')) {
+                container.innerHTML = val;
+            } else {
+                container.innerHTML = getMediaContentHTML(val);
+            }
         };
 
         window.addMusicEmbed = () => {
@@ -3091,7 +3114,6 @@ bDays.forEach(b => {
         window.reorderMusicEmbed = (id, dir) => { const arr = state.musicEmbeds.filter(x=>x.tab===state.activeMusicEmbedTab); const globalIdx = state.musicEmbeds.findIndex(x=>x.id===id); const localIdx = arr.findIndex(x=>x.id===id); if (localIdx > -1) { const newLocalIdx = localIdx + dir; if(newLocalIdx >= 0 && newLocalIdx < arr.length) { const targetGlobalIdx = state.musicEmbeds.findIndex(x=>x.id===arr[newLocalIdx].id); const temp = state.musicEmbeds[globalIdx]; state.musicEmbeds[globalIdx] = state.musicEmbeds[targetGlobalIdx]; state.musicEmbeds[targetGlobalIdx] = temp; saveToStorage(); window.renderMusic(); } } };
         window.moveMusicEmbed = (id, newTab) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) { e.tab = newTab; saveToStorage(); window.renderMusic(); } };
         window.updateMusicEmbed = (id, field, val) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) { e[field] = val; saveToStorage(); } };
-        window.playEmbed = (id) => { const e = state.musicEmbeds.find(x=>x.id===id); if(e) document.getElementById('music-embed-container').innerHTML = e.code; };
 
         // Radio Playlists
         window.switchRadioTab = (tab) => { state.activeRadioTab = tab; window.renderMusic(); };
