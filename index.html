@@ -2493,7 +2493,16 @@
             const maxH = isPopOut ? '100%' : '400px';
             
             if (type === 'drawio') {
-                return `<iframe src="${url}" width="100%" height="${isPopOut ? '100%' : '450px'}" frameborder="0" allowfullscreen allow="clipboard-read; clipboard-write; fullscreen" style="border-radius:4px; background:var(--bg-color); border:none; min-height:${isPopOut ? '300px' : '450px'};"></iframe>`;
+                // Smart URL converter: Automatically injects ?embed=1 to bypass X-Frame-Options blocks!
+                let embedUrl = url.trim();
+                if (embedUrl.includes('diagrams.net') || embedUrl.includes('draw.io')) {
+                    const hashIdx = embedUrl.indexOf('#');
+                    const hashPart = hashIdx > -1 ? embedUrl.substring(hashIdx) : '';
+                    // Routes through official embed engine while preserving your OneDrive file ID (#W...)
+                    embedUrl = `https://app.diagrams.net/?embed=1&ui=dark&spin=1${hashPart}`;
+                }
+                // Added allow="popups" so Microsoft OneDrive login screens can open securely!
+                return `<iframe src="${embedUrl}" width="100%" height="${isPopOut ? '100%' : '450px'}" frameborder="0" allowfullscreen allow="popups popups-to-escape-sandbox clipboard-read clipboard-write fullscreen" style="border-radius:4px; background:var(--bg-color); border:none; min-height:${isPopOut ? '300px' : '450px'};"></iframe>`;
             } else if (type === 'image') {
                 return `<div style="width:100%; height:${isPopOut ? '100%' : 'auto'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; border-radius:4px;">
                     <img src="${url}" alt="Preview" style="max-width:100%; max-height:${maxH}; object-fit:contain; cursor:zoom-in; transition:transform 0.1s ease-out; user-select:none; touch-action:none;" onwheel="zoomImgWheel(event, this)" onpointerdown="panImgStart(event, this)" ondblclick="toggleImgZoom(this)" title="Scroll to zoom • Drag to pan • Dbl-click to reset" onerror="this.parentElement.innerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Image failed to load (broken link or hotlink protected).</span>'">
@@ -2523,7 +2532,6 @@
             renderProjects();
         };
 
-        // Upgraded with custom defW and defH so drawing workspaces open nice and large!
         window.spawnPopOutWindow = (title, url, defW = 500, defH = 400) => {
             if (!url || !url.trim()) return;
             const wndId = 'popout_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
@@ -2565,9 +2573,9 @@
             });
         };
 
-        // Top Bar Launcher: Spawns an 850x600 floating dark-mode workspace!
+        // Upgraded Top Bar Launcher with ?embed=1 flag included!
         window.openDrawioWorkspace = () => {
-            spawnPopOutWindow(' Draw.io Workspace', 'https://app.diagrams.net/?ui=dark', 850, 600);
+            spawnPopOutWindow('🎨 Draw.io Workspace', 'https://app.diagrams.net/?embed=1&ui=dark&spin=1', 850, 600);
         };
 
         // Background Player Trigger for Any Saved Link
