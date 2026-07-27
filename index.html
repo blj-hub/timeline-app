@@ -2493,14 +2493,18 @@
             const maxH = isPopOut ? '100%' : '400px';
             
             if (type === 'drawio') {
-                // Uses embed.diagrams.net and adds &onedrive=1 to enable cloud saving!
-                let embedUrl = url.trim();
-                if (embedUrl.includes('diagrams.net') || embedUrl.includes('draw.io')) {
-                    const hashIdx = embedUrl.indexOf('#');
-                    const hashPart = hashIdx > -1 ? embedUrl.substring(hashIdx) : '';
-                    embedUrl = `https://embed.diagrams.net/?embed=1&ui=dark&spin=1&onedrive=1${hashPart}`;
+                let targetUrl = url.trim();
+                // 1. If it's a saved diagram link (contains a # file ID like #W... or #G...), route to clean read-only viewer!
+                if (targetUrl.includes('#')) {
+                    const hashIdx = targetUrl.indexOf('#');
+                    const hashPart = targetUrl.substring(hashIdx);
+                    targetUrl = `https://viewer.diagrams.net/?tags=%7B%7D&highlight=0000ff&edit=_blank&layers=1&nav=1&ui=dark${hashPart}`;
+                } else if (targetUrl.includes('app.diagrams.net') || targetUrl.includes('draw.io')) {
+                    // 2. If it's a generic link without a hash, route to the unblocked embed domain (NO embed=1 flag!)
+                    targetUrl = targetUrl.replace('app.diagrams.net', 'embed.diagrams.net').replace('draw.io', 'embed.diagrams.net');
                 }
-                return `<iframe src="${embedUrl}" width="100%" height="${isPopOut ? '100%' : '450px'}" frameborder="0" allowfullscreen allow="popups popups-to-escape-sandbox clipboard-read clipboard-write fullscreen" style="border-radius:4px; background:var(--bg-color); border:none; min-height:${isPopOut ? '300px' : '450px'};"></iframe>`;
+                // allow="popups" ensures Microsoft OneDrive OAuth login screens can open safely from inside the iframe!
+                return `<iframe src="${targetUrl}" width="100%" height="${isPopOut ? '100%' : '450px'}" frameborder="0" allowfullscreen allow="popups popups-to-escape-sandbox clipboard-read clipboard-write fullscreen" style="border-radius:4px; background:var(--bg-color); border:none; min-height:${isPopOut ? '300px' : '450px'};"></iframe>`;
             } else if (type === 'image') {
                 return `<div style="width:100%; height:${isPopOut ? '100%' : 'auto'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; position:relative; border-radius:4px;">
                     <img src="${url}" alt="Preview" style="max-width:100%; max-height:${maxH}; object-fit:contain; cursor:zoom-in; transition:transform 0.1s ease-out; user-select:none; touch-action:none;" onwheel="zoomImgWheel(event, this)" onpointerdown="panImgStart(event, this)" ondblclick="toggleImgZoom(this)" title="Scroll to zoom • Drag to pan • Dbl-click to reset" onerror="this.parentElement.innerHTML='<span style=\\'color:var(--now-line); font-size:12px;\\'>⚠️ Image failed to load (broken link or hotlink protected).</span>'">
@@ -2571,9 +2575,10 @@
             });
         };
 
-        // Upgraded Top Bar Launcher using embed.diagrams.net + onedrive=1!
+        // Top Bar Launcher: Restored to open as an 850x600 floating popout window!
+        // Notice we use embed.diagrams.net WITHOUT the embed=1 flag so it never freezes on loading!
         window.openDrawioWorkspace = () => {
-            spawnPopOutWindow('🎨 Draw.io Workspace', 'https://embed.diagrams.net/?embed=1&ui=dark&spin=1&onedrive=1', 850, 600);
+            spawnPopOutWindow('🎨 Draw.io Workspace', 'https://embed.diagrams.net/?ui=dark&onedrive=1', 850, 600);
         };
 
         // Background Player Trigger for Any Saved Link
