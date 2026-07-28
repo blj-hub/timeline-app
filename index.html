@@ -2202,20 +2202,12 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
 
             // --- LAUNCH AS FULL-SCREEN LIVE BACKGROUND ---
             if (mode === true || mode === 'background') {
-                const layer = document.getElementById('atmosphere-layer');
-                if (!layer) return;
-                
                 state.atmoInteractive = true;
-                
-                const dimOpacity = state.atmoDim !== undefined ? state.atmoDim : '0.6';
-                const blurAmt = state.atmoBlur || '5px';
-                const overlay = `<div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s, opacity 0.2s; opacity:0;"></div>`;
-                
-                layer.innerHTML = `<div id="atmo-media-el" style="width:100vw; height:100%; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1;">
-                    <iframe id="active-drawio-iframe" src="${embedUrl}" style="width:100vw; height:100%; border:none; pointer-events:auto !important; background:var(--bg-color);"></iframe>
-                </div>` + overlay;
-                
-                if (typeof updateAtmoInteractivity === 'function') updateAtmoInteractivity();
+                state.atmoMode = 'video';
+                state.atmoVideoUrl = diagId;
+                syncAtmoSettingsForCurrentUrl(); // Loads diagram fallback settings!
+                saveToStorage();
+                applyAtmosphere(true);
                 return;
             }
 
@@ -2619,6 +2611,31 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             }
         };
 
+        // Helper: Checks which background is playing and loads its specific settings into active state
+        window.syncAtmoSettingsForCurrentUrl = () => {
+            if (!state.atmoDefaultSettings) {
+                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, muted: true, vol: 0.5 };
+            }
+            // Check if active URL belongs to a saved preset in your library
+            const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === state.atmoVideoUrl);
+            const targetSettings = activePreset ? (activePreset.settings || state.atmoDefaultSettings) : state.atmoDefaultSettings;
+            
+            // If preset exists but was created before this update, initialize its settings object
+            if (activePreset && !activePreset.settings) {
+                activePreset.settings = { ...targetSettings };
+            }
+
+            state.atmoDim = targetSettings.dim !== undefined ? targetSettings.dim : '0.6';
+            state.atmoBlur = targetSettings.blur || '5px';
+            state.atmoFit = targetSettings.fit || 'cover';
+            state.atmoScale = targetSettings.scale !== undefined ? targetSettings.scale : 1;
+            state.atmoPosX = targetSettings.posX !== undefined ? targetSettings.posX : 0;
+            state.atmoPosY = targetSettings.posY !== undefined ? targetSettings.posY : 0;
+            state.atmoMediaSpeed = targetSettings.mediaSpeed !== undefined ? targetSettings.mediaSpeed : 1;
+            state.atmoMuted = targetSettings.muted !== undefined ? targetSettings.muted : true;
+            state.atmoVol = targetSettings.vol !== undefined ? targetSettings.vol : 0.5;
+        };
+
         window.resetAtmoFraming = () => {
             state.atmoFit = 'cover'; state.atmoScale = 1; state.atmoPosX = 0; state.atmoPosY = 0; state.atmoMediaSpeed = 1;
             if(document.getElementById('atmo-fit')) document.getElementById('atmo-fit').value = 'cover';
@@ -2626,8 +2643,9 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             if(document.getElementById('atmo-pos-x')) { document.getElementById('atmo-pos-x').value = 0; if(document.getElementById('atmo-posx-val')) document.getElementById('atmo-posx-val').innerText = '0px'; }
             if(document.getElementById('atmo-pos-y')) { document.getElementById('atmo-pos-y').value = 0; if(document.getElementById('atmo-posy-val')) document.getElementById('atmo-posy-val').innerText = '0px'; }
             if(document.getElementById('atmo-media-speed')) { document.getElementById('atmo-media-speed').value = 1; if(document.getElementById('atmo-mspeed-val')) document.getElementById('atmo-mspeed-val').innerText = '1x'; }
-            saveToStorage();
-            applyAtmosphere();
+            
+            // Automatically save reset values back to the active preset or fallback defaults
+            updateAtmosphereSettings();
         };
 
         window.updateAtmosphereSettings = () => {
@@ -2642,6 +2660,23 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             if(document.getElementById('atmo-vol')) {
                 const volVal = parseFloat(document.getElementById('atmo-vol').value);
                 state.atmoVol = !isNaN(volVal) ? volVal : 0.5;
+            }
+
+            // Save slider changes directly to the currently playing preset, or to default fallback memory!
+            if (!state.atmoDefaultSettings) {
+                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, muted: true, vol: 0.5 };
+            }
+            const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === state.atmoVideoUrl);
+            const currentSettingsObj = {
+                dim: state.atmoDim, blur: state.atmoBlur, fit: state.atmoFit,
+                scale: state.atmoScale, posX: state.atmoPosX, posY: state.atmoPosY,
+                mediaSpeed: state.atmoMediaSpeed, muted: state.atmoMuted, vol: state.atmoVol
+            };
+
+            if (activePreset) {
+                activePreset.settings = currentSettingsObj;
+            } else {
+                state.atmoDefaultSettings = currentSettingsObj;
             }
             
             saveToStorage();
@@ -2672,7 +2707,7 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             }).join('');
         };
 
-        // 1. Save Web URLs (+ Save Web URL Button)
+        // 1. Save Web URLs (+ Save Web URL Button - Captures active slider settings!)
         window.addAtmoVideo = () => {
             const nameEl = document.getElementById('atmo-vid-name');
             const urlEl = document.getElementById('atmo-vid-url');
@@ -2681,19 +2716,33 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             const url = urlEl.value.trim();
             const name = nameEl.value.trim() || 'My Web Media';
             
-            // Smart media type detection for web URLs!
             let mediaType = 'web';
             if (/(?:youtu\.be\/|youtube\.com\/)/i.test(url)) mediaType = 'youtube';
             else if (/(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url)) mediaType = 'image';
             else if (/\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url)) mediaType = 'video';
             
             if(!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
-            const newVid = { id: 'v_' + Date.now(), name: name, url: url, mediaType: mediaType, isLocal: false };
+            
+            // Capture whatever the user currently has set on their sliders when saving!
+            const currentSettings = {
+                dim: state.atmoDim !== undefined ? state.atmoDim : '0.6',
+                blur: state.atmoBlur || '5px',
+                fit: state.atmoFit || 'cover',
+                scale: state.atmoScale !== undefined ? state.atmoScale : 1,
+                posX: state.atmoPosX !== undefined ? state.atmoPosX : 0,
+                posY: state.atmoPosY !== undefined ? state.atmoPosY : 0,
+                mediaSpeed: state.atmoMediaSpeed !== undefined ? state.atmoMediaSpeed : 1,
+                muted: state.atmoMuted !== undefined ? state.atmoMuted : true,
+                vol: state.atmoVol !== undefined ? state.atmoVol : 0.5
+            };
+
+            const newVid = { id: 'v_' + Date.now(), name: name, url: url, mediaType: mediaType, isLocal: false, settings: currentSettings };
             
             state.atmoVideoLibrary.unshift(newVid);
             state.atmoVideoUrl = newVid.url;
             nameEl.value = ''; urlEl.value = '';
             
+            syncAtmoSettingsForCurrentUrl();
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
@@ -2708,6 +2757,7 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             state.atmoMode = 'video';
             state.atmoVideoUrl = url;
             
+            syncAtmoSettingsForCurrentUrl();
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
@@ -2721,18 +2771,24 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             const tempUrl = URL.createObjectURL(file);
             state.atmoVideoUrl = tempUrl;
             
-            // Explicitly detect if the file is a video or image
             const isVid = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(file.name);
             const mediaType = isVid ? 'video' : 'image';
             const cleanName = "[Local] " + (file.name.length > 20 ? file.name.substring(0, 17) + "..." : file.name);
             
             if (!state.atmoVideoLibrary) state.atmoVideoLibrary = [];
             
-            // Remove any previous local session items so the list stays clean
             state.atmoVideoLibrary = state.atmoVideoLibrary.filter(v => !v.isLocal);
-            state.atmoVideoLibrary.unshift({ id: 'local_' + Date.now(), name: cleanName, url: tempUrl, isLocal: true, mediaType: mediaType });
+            state.atmoVideoLibrary.unshift({ 
+                id: 'local_' + Date.now(), 
+                name: cleanName, 
+                url: tempUrl, 
+                isLocal: true, 
+                mediaType: mediaType,
+                settings: { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, muted: true, vol: 0.5 }
+            });
             
             e.target.value = '';
+            syncAtmoSettingsForCurrentUrl();
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
@@ -2741,6 +2797,7 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
         // 3. Play / Activate Preset
         window.selectAtmoVideo = (url) => {
             state.atmoVideoUrl = url;
+            syncAtmoSettingsForCurrentUrl(); // Loads this preset's saved settings into active state!
             saveToStorage();
             renderAtmoVideoList();
             applyAtmosphere();
@@ -3106,8 +3163,9 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             if (!url || !url.trim()) return;
             state.atmoMode = 'video';
             state.atmoVideoUrl = url.trim();
+            syncAtmoSettingsForCurrentUrl(); // Syncs to preset memory or default fallback!
             saveToStorage();
-            applyAtmosphere(true); // Pass forceRefresh = true to guarantee background updates!
+            applyAtmosphere(true);
         };
 
        // Universal Action Button Generator for Links (Projects, Todos, Lists)
