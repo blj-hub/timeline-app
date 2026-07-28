@@ -790,6 +790,15 @@
             
 				<hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
 
+                <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Draw.io Editor Theme</h4>
+                <div class="segmented-control" style="margin-bottom:10px;">
+                    <div class="segmented-btn active" id="btn-drawio-theme-dark" onclick="switchDrawioTheme('dark')">Dark</div>
+                    <div class="segmented-btn" id="btn-drawio-theme-light" onclick="switchDrawioTheme('light')">Light</div>
+                    <div class="segmented-btn" id="btn-drawio-theme-kennedy" onclick="switchDrawioTheme('kennedy')">Classic (White)</div>
+                </div>
+
+				<hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
+
                 <div class="form-row"><div class="form-group"><label>App Background</label><div style="display:flex;gap:8px;"><input type="color" id="theme-bg" style="width:40px;"><input type="text" id="txt-theme-bg" style="flex:1"></div></div><div class="form-group"><label>Window Background</label><div style="display:flex;gap:8px;"><input type="color" id="theme-modal-bg" style="width:40px;"><input type="text" id="txt-theme-modal-bg" style="flex:1"></div></div></div>
                 
                 <div class="form-row"><div class="form-group"><label>Input/Task BG</label><div style="display:flex;gap:8px;"><input type="color" id="theme-input-bg" style="width:40px;"><input type="text" id="txt-theme-input-bg" style="flex:1"></div></div><div class="form-group"><label>Input/Task Border</label><div style="display:flex;gap:8px;"><input type="color" id="theme-input-border" style="width:40px;"><input type="text" id="txt-theme-input-border" style="flex:1"></div></div></div>
@@ -954,6 +963,7 @@
 		};
 		
 		let activeDiagramSession = null; // Tracks which diagram ID is currently being edited
+let shouldExitEditorAfterExport = false; // Tracks if user clicked "Save & Exit" vs just "Save"
 
 window.addEventListener('message', (e) => {
     if (!e.data || typeof e.data !== 'string') return;
@@ -971,8 +981,9 @@ window.addEventListener('message', (e) => {
                 autosave: 1
             }), '*');
         }
-        // 2. User clicked Save -> Request an exported SVG with embedded XML
+        // 2. User clicked Save or Save & Exit -> Record exit intention & request SVG export
         else if (msg.event === 'save') {
+            shouldExitEditorAfterExport = !!msg.exit; // true ONLY if "Save & Exit" was clicked!
             iframe.contentWindow.postMessage(JSON.stringify({
                 action: 'export',
                 format: 'xmlsvg',
@@ -989,17 +1000,54 @@ window.addEventListener('message', (e) => {
                     updated: Date.now()
                 };
                 saveDiagramStore();
-                renderProjects();
                 
-                // Cleanly close the editor popout window
-                const popoutWnd = iframe.closest('.tool-window');
-                if (popoutWnd) popoutWnd.remove();
+                const dynamicPopout = iframe.closest('.dynamic-popout');
+                const isBackground = !!iframe.closest('#atmosphere-layer');
+                const isInlineEditor = !dynamicPopout && !isBackground;
+
+                // IF user clicked "Save & Exit", close popout, background, OR inline editor!
+                if (shouldExitEditorAfterExport) {
+                    if (dynamicPopout) {
+                        dynamicPopout.remove();
+                    } else if (isBackground) {
+                        activeDiagramSession = null;
+                        applyAtmosphere(true);
+                    } else {
+                        // Inline dropdown editor -> re-render lists to show your new updated SVG!
+                        activeDiagramSession = null;
+                        renderProjects();
+                        renderTodos();
+                    }
+                    shouldExitEditorAfterExport = false;
+                } else {
+                    // User just clicked "Save" to save progress! Keep inline editor untouched & open
+                    if (!isInlineEditor) {
+                        renderProjects();
+                        renderTodos();
+                    }
+                    iframe.contentWindow.postMessage(JSON.stringify({
+                        action: 'status',
+                        message: 'All changes saved!',
+                        modified: false
+                    }), '*');
+                }
             }
         }
-        // 4. User exited without saving
+        // 4. User clicked Exit without saving
         else if (msg.event === 'exit') {
-            const popoutWnd = iframe.closest('.tool-window');
-            if (popoutWnd) popoutWnd.remove();
+            const dynamicPopout = iframe.closest('.dynamic-popout');
+            const isBackground = !!iframe.closest('#atmosphere-layer');
+            if (dynamicPopout) {
+                dynamicPopout.remove();
+            } else if (isBackground) {
+                activeDiagramSession = null;
+                applyAtmosphere(true);
+            } else {
+                activeDiagramSession = null;
+                renderProjects();
+                renderTodos();
+            }
+            shouldExitEditorAfterExport = false;
         }
     } catch (err) {}
 });
@@ -2054,39 +2102,86 @@ window.importData = (event) => {
 
         // --- Projects Engine ---
 		
-		window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram") => {
-    const diagId = existingDiagId || 'diag_' + Date.now();
-    activeDiagramSession = diagId;
+		// Helper to save and switch the preferred Draw.io theme
+        window.switchDrawioTheme = (theme) => {
+            state.drawioTheme = theme;
+            ['dark', 'light', 'kennedy'].forEach(t => {
+                const btn = document.getElementById('btn-drawio-theme-' + t);
+                if (btn) btn.classList.toggle('active', t === theme);
+            });
+            saveToStorage();
+        };
 
-    if (!diagramStore[diagId]) {
-        diagramStore[diagId] = { id: diagId, title: title, xml: '', svgData: null, created: Date.now() };
-        saveDiagramStore();
-    }
+        window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode = 'popout', targetEl = null) => {
+            const diagId = existingDiagId || 'diag_' + Date.now();
+            activeDiagramSession = diagId;
 
-    const wndId = 'popout_drawio_' + Date.now();
-    const hdrId = 'hdr_' + wndId;
-    const embedUrl = 'https://embed.diagrams.net/?embed=1&ui=dark&spin=1&proto=json&saveAndExit=1&noSaveBtn=0&libraries=1';
+            if (!diagramStore[diagId]) {
+                diagramStore[diagId] = { id: diagId, title: title, xml: '', svgData: null, created: Date.now() };
+                saveDiagramStore();
+            }
 
-    const div = document.createElement('div');
-    div.className = 'tool-window active dynamic-popout';
-    div.id = wndId;
-    div.style.cssText = `top:80px; left:150px; width:900px; height:650px; z-index:300; min-width:400px; min-height:300px;`;
-    
-    div.innerHTML = `
-        <div class="drag-header" id="${hdrId}">
-            <span>🎨 Draw.io Editor: ${diagramStore[diagId].title}</span>
-            <div>
-                <button class="btn btn-secondary" style="font-size:11px; padding:2px 6px; margin-right:6px;" onclick="downloadOfflineSvg('${diagId}')" title="Download Offline SVG">💾 Save Offline SVG</button>
-                <button class="close-btn" style="font-size:18px;" onclick="document.getElementById('${wndId}').remove()">&times;</button>
-            </div>
-        </div>
-        <div class="tool-body" style="padding:0; overflow:hidden; background:#1a1a1a;">
-            <iframe id="active-drawio-iframe" src="${embedUrl}" width="100%" height="100%" frameborder="0" style="border:none; width:100%; height:100%;"></iframe>
-        </div>`;
-    
-    document.body.appendChild(div);
-    makeDraggable(wndId, hdrId);
-};
+            const wndId = 'popout_drawio_' + Date.now();
+            const hdrId = 'hdr_' + wndId;
+            
+            const drawioTheme = state.drawioTheme || 'dark';
+            const embedUrl = `https://embed.diagrams.net/?embed=1&ui=${drawioTheme}&spin=1&proto=json&saveAndExit=1&noSaveBtn=0&libraries=1`;
+
+            // --- LAUNCH AS FULL-SCREEN LIVE BACKGROUND ---
+            if (mode === true || mode === 'background') {
+                const layer = document.getElementById('atmosphere-layer');
+                if (!layer) return;
+                
+                state.atmoInteractive = true;
+                
+                const dimOpacity = state.atmoDim !== undefined ? state.atmoDim : '0.6';
+                const blurAmt = state.atmoBlur || '5px';
+                const overlay = `<div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s, opacity 0.2s; opacity:0;"></div>`;
+                
+                layer.innerHTML = `<div id="atmo-media-el" style="width:100vw; height:100%; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); z-index:1;">
+                    <iframe id="active-drawio-iframe" src="${embedUrl}" style="width:100vw; height:100%; border:none; pointer-events:auto !important; background:var(--bg-color);"></iframe>
+                </div>` + overlay;
+                
+                if (typeof updateAtmoInteractivity === 'function') updateAtmoInteractivity();
+                return;
+            }
+
+            // --- LAUNCH AS INLINE EDITOR (Inside Dropdown Trays or Popout Preview Windows) ---
+            if (mode === 'inline' && targetEl && targetEl instanceof HTMLElement) {
+                const isInsidePopout = !!targetEl.closest('.dynamic-popout');
+                // Give inline dropdown editor plenty of vertical space to draw comfortably!
+                targetEl.style.height = isInsidePopout ? '100%' : '550px';
+                targetEl.style.minHeight = isInsidePopout ? '100%' : '450px';
+                targetEl.style.maxHeight = 'none';
+                targetEl.style.padding = '0';
+                targetEl.style.background = 'var(--bg-color)';
+                
+                targetEl.innerHTML = `<iframe id="active-drawio-iframe" src="${embedUrl}" style="width:100%; height:100%; border:none; background:var(--bg-color); border-radius:6px;"></iframe>`;
+                return;
+            }
+
+            // --- LAUNCH AS FLOATING POPOUT WINDOW (Default) ---
+            const div = document.createElement('div');
+            div.className = 'tool-window active dynamic-popout';
+            div.id = wndId;
+            div.style.cssText = `top:80px; left:150px; width:900px; height:650px; z-index:300; min-width:400px; min-height:300px;`;
+            
+            div.innerHTML = `
+                <div class="drag-header" id="${hdrId}">
+                    <span>🎨 Draw.io Editor: ${diagramStore[diagId].title}</span>
+                    <div>
+                        <button class="btn btn-secondary" style="font-size:11px; padding:2px 6px; margin-right:6px;" onclick="downloadOfflineSvg('${diagId}')" title="Download Offline SVG">💾 Save Offline SVG</button>
+                        <button class="close-btn" style="font-size:18px;" onclick="document.getElementById('${wndId}').remove()">&times;</button>
+                    </div>
+                </div>
+                <div class="tool-body" style="padding:0; overflow:hidden; background:#1a1a1a;">
+                    <iframe id="active-drawio-iframe" src="${embedUrl}" width="100%" height="100%" frameborder="0" style="border:none; width:100%; height:100%;"></iframe>
+                </div>`;
+            
+            document.body.appendChild(div);
+            makeDraggable(wndId, hdrId);
+        };
+		
         window.switchProjectTab = (tab) => { state.activeProjectTab = tab; if(!state.activeProjectCategory[tab]) { state.activeProjectCategory[tab] = state.projectCategories[tab][0]; } renderProjects(); };
         window.addProjectTab = () => { const t = prompt("New Project Name:"); if(t && !state.projectTabs.includes(t)) { state.projectTabs.push(t); state.projectCategories[t] = ['General']; state.activeProjectCategory[t] = 'General'; state.activeProjectTab = t; saveToStorage(); renderProjects(); } };
         window.deleteProjectTab = (tab) => { if(confirm(`Delete project '${tab}' and all items?`)) { state.projectTabs = state.projectTabs.filter(t=>t!==tab); delete state.projectCategories[tab]; delete state.activeProjectCategory[tab]; state.projectItems = state.projectItems.filter(c=>c.tab!==tab); state.events = state.events.filter(e=>!(e.projectTab===tab)); state.activeProjectTab = state.projectTabs[0]; saveToStorage(); renderProjects(); render(); }};
@@ -2386,6 +2481,14 @@ window.importData = (event) => {
             const layer = document.getElementById('atmosphere-layer');
             if (!layer) return;
 
+            // --- SMART OVERLAY FADE ---
+            // When unlocked (drawing/interacting), fade out blur & dim for 100% clarity.
+            // When locked (timeline mode), restore exact user-configured dim & blur!
+            const overlay = document.getElementById('atmo-overlay');
+            if (overlay) {
+                overlay.style.opacity = (state.atmoInteractive && isLive) ? '0' : '1';
+            }
+
             if (state.atmoInteractive && isLive) {
                 layer.style.zIndex = '5';
                 layer.style.pointerEvents = 'auto';
@@ -2614,7 +2717,7 @@ window.importData = (event) => {
             applyAtmosphere();
         };
 
-        window.applyAtmosphere = () => {
+        window.applyAtmosphere = (forceRefresh = false) => {
             const mode = state.atmoMode || 'solid';
             const layer = document.getElementById('atmosphere-layer');
             if(!layer) return;
@@ -2693,28 +2796,35 @@ window.importData = (event) => {
             const existingMedia = document.getElementById('atmo-media-el');
             const existingOverlay = document.getElementById('atmo-overlay');
 
-            if (existingMedia && existingOverlay && layer.dataset.url === currentUrl && layer.dataset.mode === mode) {
-                existingOverlay.style.background = `rgba(0,0,0,${dimOpacity})`;
-                existingOverlay.style.backdropFilter = `blur(${blurAmt})`;
-                existingMedia.style.transform = transformStyle;
-                
-                if (existingMedia.tagName.toLowerCase() === 'img' || existingMedia.tagName.toLowerCase() === 'video') {
-                    existingMedia.style.objectFit = fit;
-                } else {
-                    const iframe = existingMedia.querySelector('iframe');
-                    if (iframe) iframe.style.cssText = getYtStyle(fit);
+            const isDiagram = currentUrl.startsWith('diag_') || diagramStore[currentUrl];
+            const isCurrentlyEditingBg = !!document.querySelector('#atmosphere-layer #active-drawio-iframe');
+
+            // Cache check: Bypass if forceRefresh is true, if actively editing in bg, or if diagram timestamp updated!
+            if (!forceRefresh && !isCurrentlyEditingBg && existingMedia && existingOverlay && layer.dataset.url === currentUrl && layer.dataset.mode === mode) {
+                if (!isDiagram || layer.dataset.updated == (diagramStore[currentUrl]?.updated || 0)) {
+                    existingOverlay.style.background = `rgba(0,0,0,${dimOpacity})`;
+                    existingOverlay.style.backdropFilter = `blur(${blurAmt})`;
+                    existingMedia.style.transform = transformStyle;
+                    
+                    if (existingMedia.tagName.toLowerCase() === 'img' || existingMedia.tagName.toLowerCase() === 'video') {
+                        existingMedia.style.objectFit = fit;
+                    } else {
+                        const iframe = existingMedia.querySelector('iframe');
+                        if (iframe) iframe.style.cssText = getYtStyle(fit);
+                    }
+                    applyMediaAttributes();
+                    updateAtmoInteractivity();
+                    render(); 
+                    return;
                 }
-                applyMediaAttributes();
-                updateAtmoInteractivity();
-                render(); 
-                return;
             }
 
             layer.innerHTML = '';
             layer.dataset.mode = mode;
             layer.dataset.url = currentUrl;
+            if (isDiagram) layer.dataset.updated = diagramStore[currentUrl]?.updated || 0;
 
-            const overlay = `<div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s;"></div>`;
+            const overlay = `<div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s, opacity 0.2s;"></div>`;
 
             if(mode === 'video') {
                 let url = currentUrl;
@@ -2725,7 +2835,6 @@ window.importData = (event) => {
                 const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === url);
                 const presetType = activePreset ? activePreset.mediaType : null;
 
-                const isDiagram = url.startsWith('diag_') || diagramStore[url];
                 const isImage = presetType === 'image' || /(\.(jpeg|jpg|gif|png|webp|svg|avif|bmp|ico)(\?.*)?$|format=(jpg|jpeg|png|webp|gif)|giphy\.com|tenor\.com|imgur\.com|twimg\.com)/i.test(url);
                 const isVideo = presetType === 'video' || /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url) || (url.startsWith('blob:') && !isImage);
 
@@ -2733,7 +2842,12 @@ window.importData = (event) => {
 
                 if(isDiagram) {
                     const blobUrl = getDiagramBlobUrl(url);
-                    content = `<iframe id="atmo-media-el" src="${blobUrl}" style="${baseStyle} border:none; background:transparent;"></iframe>`;
+                    const diagId = diagramStore[url] ? url : (url.startsWith('diag_') ? url : '');
+                    const diagTitle = diagramStore[diagId] ? (diagramStore[diagId].title || 'Diagram').replace(/'/g, "\\'") : 'Diagram';
+                    content = `<div id="atmo-media-el" style="${baseStyle}">
+                        <iframe src="${blobUrl}" style="width:100%; height:100%; border:none; background:transparent; pointer-events:none !important;"></iframe>
+                        <div class="diag-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:pointer; background:transparent;" ondblclick="openDrawioWorkspace('${diagId}', '${diagTitle}', true)" title="Double-click to open Draw.io editor in background"></div>
+                    </div>`;
                 } else if(ytMatch && ytMatch[1]) {
                     const vidId = ytMatch[1];
                     content = `<div id="atmo-media-el" style="${baseStyle} display:flex; justify-content:center; align-items:center; overflow:hidden;"><iframe src="https://www.youtube.com/embed/${vidId}?autoplay=1&mute=${isMuted ? 1 : 0}&loop=1&controls=1&showinfo=0&rel=0&playlist=${vidId}&modestbranding=0&enablejsapi=1" style="${getYtStyle(fit)}" allow="autoplay; encrypted-media" onload="applyMediaAttributes()"></iframe></div>`;
@@ -2780,9 +2894,11 @@ window.importData = (event) => {
                 
                 if (diag && diag.svgData) {
                     const blobUrl = getDiagramBlobUrl(diagId);
-                    return `<div style="width:100%; height:${isPopOut ? '100%' : 'auto'}; min-height:${isPopOut ? '300px' : '220px'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; background:var(--ruler-bg); padding:10px; border-radius:6px; position:relative;" ondblclick="openDrawioWorkspace('${diagId}', '${(diag.title || 'Diagram').replace(/'/g, "\\'")}')" title="Double-click to open in interactive Draw.io editor">
+                    const cleanTitle = (diag.title || 'Diagram').replace(/'/g, "\\'");
+                    return `<div class="diag-preview-container" style="width:100%; height:${isPopOut ? '100%' : 'auto'}; min-height:${isPopOut ? '300px' : '220px'}; max-height:${maxH}; overflow:hidden; display:flex; justify-content:center; align-items:center; background:var(--ruler-bg); padding:10px; border-radius:6px; position:relative;" title="Double-click to open in interactive Draw.io editor">
                         <div style="position:absolute; top:8px; left:8px; font-size:10px; background:rgba(0,0,0,0.6); padding:2px 6px; border-radius:4px; color:var(--accent-color); z-index:10; pointer-events:none;">⚡ Offline SVG (Dbl-Click to Edit)</div>
-                        <iframe src="${blobUrl}" frameborder="0" style="width:100%; height:100%; min-height:${isPopOut ? '100%' : '220px'}; border:none; pointer-events:none; background:transparent;"></iframe>
+                        <iframe src="${blobUrl}" frameborder="0" style="width:100%; height:100%; min-height:${isPopOut ? '100%' : '220px'}; border:none; pointer-events:none !important; background:transparent;"></iframe>
+                        <div class="diag-preview-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:pointer; background:transparent; z-index:5;" ondblclick="openDrawioWorkspace('${diagId}', '${cleanTitle}', 'inline', this.closest('.diag-preview-container'))"></div>
                     </div>`;
                 } else {
                     return `<div style="padding:20px; text-align:center; color:var(--text-secondary); background:var(--ruler-bg); border-radius:6px;">
@@ -2915,7 +3031,7 @@ window.importData = (event) => {
             state.atmoMode = 'video';
             state.atmoVideoUrl = url.trim();
             saveToStorage();
-            applyAtmosphere();
+            applyAtmosphere(true); // Pass forceRefresh = true to guarantee background updates!
         };
 
         // Universal Action Button Generator for Links (Projects, Todos, Lists)
@@ -3892,6 +4008,13 @@ bDays.forEach(b => {
             });
             
             document.getElementById('btn-theme-reset').onclick = () => { if(confirm('Reset all colors to default dark theme?')) { activeTheme = {...defaultDarkTheme}; applyTheme(); document.getElementById('btn-theme-settings').click(); } };
+            
+            // --- SYNC DRAW.IO THEME BUTTONS ---
+            const currentDrawTheme = state.drawioTheme || 'dark';
+            ['dark', 'light', 'kennedy'].forEach(t => {
+                const btn = document.getElementById('btn-drawio-theme-' + t);
+                if (btn) btn.classList.toggle('active', t === currentDrawTheme);
+            });
             
             renderThemesList();
             closeModal(); document.getElementById('modal-theme').classList.add('active'); modalOverlay.classList.add('active');
