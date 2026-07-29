@@ -1059,7 +1059,7 @@ window.addEventListener('message', (e) => {
                 theme: exportTheme // Forces 'light' or 'dark' instead of defaulting to OS 'auto'
             }), '*');
         }
-        // 3. Receive exported SVG -> Save to separate storage and update UI
+        // 3. Receive exported SVG -> Save to separate storage and update UI (+ Cloud Sync!)
         else if (msg.event === 'export') {
             if (activeDiagramSession && msg.data) {
                 diagramStore[activeDiagramSession] = {
@@ -1069,6 +1069,13 @@ window.addEventListener('message', (e) => {
                     updated: Date.now()
                 };
                 saveDiagramStore();
+
+                // AUTOMATIC CLOUD SYNC: Push updated diagrams to your GitHub Gist!
+                if (syncSettings.token && syncSettings.gistId) {
+                    document.getElementById('sync-status').innerText = "Status: Pending Cloud Save...";
+                    clearTimeout(syncTimeout);
+                    syncTimeout = setTimeout(forceSaveToCloud, 2000);
+                }
                 
                 const dynamicPopout = iframe.closest('.dynamic-popout');
                 const isBackground = !!iframe.closest('#atmosphere-layer');
@@ -1255,20 +1262,32 @@ window.addEventListener('message', (e) => {
 
         async function forceLoadFromCloud() {
             if (!syncSettings.token || !syncSettings.gistId) { alert("Please enter your GitHub Token and Gist ID first."); return; }
-            document.getElementById('sync-status').innerText = "Status: Pulling...";
+            document.getElementById('sync-status').innerText = "Status: Pulling from Cloud...";
             try {
                 const res = await fetch(`https://api.github.com/gists/${syncSettings.gistId}`, { headers: { 'Authorization': `Bearer ${syncSettings.token}` } });
                 if (!res.ok) throw new Error('Failed to fetch from GitHub');
                 const gist = await res.json();
-                if (!gist.files['timeline_data.json']) throw new Error('timeline_data.json not found in Gist');
                 
-                const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
-                Object.assign(state, cloudData);
-                normalizeLoadedState();
+                // 1. Pull core timeline data
+                if (gist.files['timeline_data.json']) {
+                    const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
+                    Object.assign(state, cloudData);
+                    normalizeLoadedState();
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+                } else {
+                    throw new Error('timeline_data.json not found in Gist');
+                }
+
+                // 2. Simultaneously pull your Draw.io diagrams library from the same Gist!
+                if (gist.files['diagrams_data.json']) {
+                    const cloudDiagrams = JSON.parse(gist.files['diagrams_data.json'].content);
+                    diagramStore = cloudDiagrams;
+                    saveDiagramStore();
+                }
                 
-                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
                 document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
                 renderAll();
+                alert("Cloud Sync: Timeline & Draw.io diagrams loaded successfully!");
             } catch (err) {
                 console.error(err);
                 document.getElementById('sync-status').innerText = "Status: Pull Failed!";
@@ -1278,12 +1297,17 @@ window.addEventListener('message', (e) => {
 
         async function forceSaveToCloud() {
             if (!syncSettings.token || !syncSettings.gistId) { alert("Please enter your GitHub Token and Gist ID first."); return; }
-            document.getElementById('sync-status').innerText = "Status: Pushing...";
+            document.getElementById('sync-status').innerText = "Status: Pushing to Cloud...";
             try {
                 const res = await fetch(`https://api.github.com/gists/${syncSettings.gistId}`, {
                     method: 'PATCH',
                     headers: { 'Authorization': `Bearer ${syncSettings.token}`, 'Accept': 'application/vnd.github.v3+json' },
-                    body: JSON.stringify({ files: { 'timeline_data.json': { content: JSON.stringify(state) } } })
+                    body: JSON.stringify({ 
+                        files: { 
+                            'timeline_data.json': { content: JSON.stringify(state) },
+                            'diagrams_data.json': { content: JSON.stringify(diagramStore) }
+                        } 
+                    })
                 });
                 if (!res.ok) throw new Error('Failed to push to GitHub');
                 document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
@@ -1293,59 +1317,13 @@ window.addEventListener('message', (e) => {
             }
         }
 
-        function saveToStorage() { 
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
-            if(syncSettings.token && syncSettings.gistId) {
-                document.getElementById('sync-status').innerText = "Status: Pending Cloud Save...";
-                clearTimeout(syncTimeout);
-                syncTimeout = setTimeout(forceSaveToCloud, 2000);
-            } else {
-                document.getElementById('sync-status').innerText = "Status: Saved Locally";
-            }
-        }
-
-        function normalizeLoadedState() {
-            if(!state.customTodos) state.customTodos = []; if(!state.todoTabs) state.todoTabs = ['Inbox', 'Done']; if(!state.activeTodoTab) state.activeTodoTab = 'Inbox';
-            if(!state.habitTabs) state.habitTabs = ['Main']; if(!state.activeHabitTab) state.activeHabitTab = 'Main'; if(!state.trackedHabits) state.trackedHabits = []; if(!state.habitCompletions) state.habitCompletions = {};
-            if(!state.notes) state.notes = [{id: 'n1', title: 'Main Note', content: ''}]; if(!state.notifications) state.notifications = []; if(!state.customReminders) state.customReminders = [];
-            if(!state.expandedTodoNotes) state.expandedTodoNotes = {};
-            if(!state.showTabs) state.showTabs = { todo: true, habits: true, notes: true, music: true, projects: true };
-            if(!state.layouts) state.layouts = {};
-            if(!state.savedThemes) state.savedThemes = {};
-            
-            if(state.showProjects === undefined) state.showProjects = true;
-            if(state.showNowLine === undefined) state.showNowLine = true;
-            
-            if(state.noteEditMode === undefined) state.noteEditMode = false;
-            if(state.musicEditMode === undefined) state.musicEditMode = false;
-            
-            if(!state.listTabs) state.listTabs = ['Main List'];
-            if(!state.activeListTab) state.activeListTab = state.listTabs[0];
-            if(!state.listItems) state.listItems = [];
-            if(!state.activeTodoView) state.activeTodoView = 'todo';
-            if(!state.expandedListNotes) state.expandedListNotes = {};
-
-            if(!state.musicEmbedTabs) state.musicEmbedTabs = ['Favorites']; if(!state.activeMusicEmbedTab) state.activeMusicEmbedTab = 'Favorites'; if(!state.musicEmbeds) state.musicEmbeds = [];
-            if(!state.radioTabs) state.radioTabs = ['Stations']; if(!state.activeRadioTab) state.activeRadioTab = 'Stations'; if(!state.radios) state.radios = [];
-
-            if(!state.projectTabs || state.projectTabs.length === 0) state.projectTabs = ['Main Project'];
-            if(!state.activeProjectTab) state.activeProjectTab = state.projectTabs[0];
-            if(!state.projectCategories) state.projectCategories = {};
-            if(!state.projectCategories[state.activeProjectTab]) state.projectCategories[state.activeProjectTab] = ['General'];
-            if(!state.activeProjectCategory) state.activeProjectCategory = {};
-            if(!state.activeProjectCategory[state.activeProjectTab]) state.activeProjectCategory[state.activeProjectTab] = 'General';
-            if(!state.projectItems) state.projectItems = [];
-            if(!state.expandedProjectNotes) state.expandedProjectNotes = {};
-
-            state.events.forEach(e => { if (!e.type) e.type = e.isMilestone ? 'milestone' : 'event'; if (e.zIndex === undefined) e.zIndex = 0; if (e.inTodoList && !e.todoTab) e.todoTab = 'Inbox'; });
-            state.customTodos.forEach(c => { if(!c.tab) c.tab = 'Inbox'; if(!c.type) c.type = 'todo'; });
-            state.habitEditMode = false; state.habitCreateMode = false; state.todoEditMode = false; state.projectEditMode = false; state.noteEditMode = false; 
-        }
-
         async function bootApp() {
             document.getElementById('sync-token').value = syncSettings.token;
             document.getElementById('sync-gist').value = syncSettings.gistId;
             
+            // Safety Step 1: Always load local browser memory first so the app is never blank
+            loadFromLocalFallback();
+
             if (syncSettings.token && syncSettings.gistId) {
                 document.getElementById('sync-status').innerText = "Status: Booting from Cloud...";
                 try {
@@ -1355,16 +1333,20 @@ window.addEventListener('message', (e) => {
                         if (gist.files['timeline_data.json']) {
                             const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
                             Object.assign(state, cloudData);
-                            document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
+                            // Safety Step 2: Cache cloud pull to localStorage immediately
+                            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
                         }
+                        if (gist.files['diagrams_data.json']) {
+                            diagramStore = JSON.parse(gist.files['diagrams_data.json'].content);
+                            saveDiagramStore();
+                        }
+                        document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
                     } else { throw new Error("Cloud fetch rejected"); }
                 } catch(e) {
                     console.error(e);
                     document.getElementById('sync-status').innerText = "Status: Cloud unreachable, using Local";
                     loadFromLocalFallback();
                 }
-            } else {
-                loadFromLocalFallback();
             }
             
             normalizeLoadedState();
