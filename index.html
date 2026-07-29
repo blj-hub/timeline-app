@@ -1361,6 +1361,9 @@ window.addEventListener('message', (e) => {
             state.events.forEach(e => { if (!e.type) e.type = e.isMilestone ? 'milestone' : 'event'; if (e.zIndex === undefined) e.zIndex = 0; if (e.inTodoList && !e.todoTab) e.todoTab = 'Inbox'; });
             state.customTodos.forEach(c => { if(!c.tab) c.tab = 'Inbox'; if(!c.type) c.type = 'todo'; });
             state.habitEditMode = false; state.habitCreateMode = false; state.todoEditMode = false; state.projectEditMode = false; state.noteEditMode = false; 
+            
+            // Force background audio to be muted on every fresh load
+            state.atmoMuted = true;
         }
 
         async function bootApp() {
@@ -2659,13 +2662,12 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
         // Helper: Checks which background is playing and loads its specific settings into active state
         window.syncAtmoSettingsForCurrentUrl = () => {
             if (!state.atmoDefaultSettings) {
-                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, muted: true, vol: 0.5 };
+                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, vol: 0.5 };
             }
-            // Check if active URL belongs to a saved preset in your library
+            
             const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === state.atmoVideoUrl);
             const targetSettings = activePreset ? (activePreset.settings || state.atmoDefaultSettings) : state.atmoDefaultSettings;
             
-            // If preset exists but was created before this update, initialize its settings object
             if (activePreset && !activePreset.settings) {
                 activePreset.settings = { ...targetSettings };
             }
@@ -2677,8 +2679,10 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             state.atmoPosX = targetSettings.posX !== undefined ? targetSettings.posX : 0;
             state.atmoPosY = targetSettings.posY !== undefined ? targetSettings.posY : 0;
             state.atmoMediaSpeed = targetSettings.mediaSpeed !== undefined ? targetSettings.mediaSpeed : 1;
-            state.atmoMuted = targetSettings.muted !== undefined ? targetSettings.muted : true;
             state.atmoVol = targetSettings.vol !== undefined ? targetSettings.vol : 0.5;
+            
+            // Always default to muted when switching to a new video preset
+            state.atmoMuted = true;
         };
 
         window.resetAtmoFraming = () => {
@@ -2707,15 +2711,16 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
                 state.atmoVol = !isNaN(volVal) ? volVal : 0.5;
             }
 
-            // Save slider changes directly to the currently playing preset, or to default fallback memory!
             if (!state.atmoDefaultSettings) {
-                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, muted: true, vol: 0.5 };
+                state.atmoDefaultSettings = { dim: '0.6', blur: '5px', fit: 'cover', scale: 1, posX: 0, posY: 0, mediaSpeed: 1, vol: 0.5 };
             }
             const activePreset = (state.atmoVideoLibrary || []).find(v => v.url === state.atmoVideoUrl);
+            
             const currentSettingsObj = {
                 dim: state.atmoDim, blur: state.atmoBlur, fit: state.atmoFit,
                 scale: state.atmoScale, posX: state.atmoPosX, posY: state.atmoPosY,
-                mediaSpeed: state.atmoMediaSpeed, muted: state.atmoMuted, vol: state.atmoVol
+                mediaSpeed: state.atmoMediaSpeed, vol: state.atmoVol
+                // Deliberately omitted 'muted' so it behaves purely as a session toggle
             };
 
             if (activePreset) {
