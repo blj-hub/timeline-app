@@ -829,12 +829,21 @@
 
                 <hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
                 <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Data Backup & App Install</h4>
-                <div style="display:flex; gap:8px;">
-                    <button class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="exportData()">📤 Export JSON</button>
-                    <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0; font-size:12px; cursor:pointer;">
-                        📥 Import JSON
-                        <input type="file" accept=".json" style="display:none;" onchange="importData(event)">
-                    </label>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="exportTimelineData()">📤 Export Timeline</button>
+                        <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0; font-size:12px; cursor:pointer;">
+                            📥 Import Timeline
+                            <input type="file" accept=".json" style="display:none;" onchange="importTimelineData(event)">
+                        </label>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary" style="flex:1; font-size:12px;" onclick="exportDiagramData()">📤 Export Diagrams</button>
+                        <label class="btn btn-secondary" style="flex:1; text-align:center; margin:0; font-size:12px; cursor:pointer;">
+                            📥 Import Diagrams
+                            <input type="file" accept=".json" style="display:none;" onchange="importDiagramData(event)">
+                        </label>
+                    </div>
                 </div>
                 <button class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="installApp()">📱 Add to Home Screen</button>
 
@@ -1059,7 +1068,7 @@ window.addEventListener('message', (e) => {
                 theme: exportTheme // Forces 'light' or 'dark' instead of defaulting to OS 'auto'
             }), '*');
         }
-        // 3. Receive exported SVG -> Save to separate storage and update UI (+ Cloud Sync!)
+        // 3. Receive exported SVG -> Save to separate storage and update UI
         else if (msg.event === 'export') {
             if (activeDiagramSession && msg.data) {
                 diagramStore[activeDiagramSession] = {
@@ -1069,13 +1078,6 @@ window.addEventListener('message', (e) => {
                     updated: Date.now()
                 };
                 saveDiagramStore();
-
-                // AUTOMATIC CLOUD SYNC: Push updated diagrams to your GitHub Gist!
-                if (syncSettings.token && syncSettings.gistId) {
-                    document.getElementById('sync-status').innerText = "Status: Pending Cloud Save...";
-                    clearTimeout(syncTimeout);
-                    syncTimeout = setTimeout(forceSaveToCloud, 2000);
-                }
                 
                 const dynamicPopout = iframe.closest('.dynamic-popout');
                 const isBackground = !!iframe.closest('#atmosphere-layer');
@@ -1262,32 +1264,27 @@ window.addEventListener('message', (e) => {
 
         async function forceLoadFromCloud() {
             if (!syncSettings.token || !syncSettings.gistId) { alert("Please enter your GitHub Token and Gist ID first."); return; }
-            document.getElementById('sync-status').innerText = "Status: Pulling from Cloud...";
+            document.getElementById('sync-status').innerText = "Status: Pulling...";
             try {
                 const res = await fetch(`https://api.github.com/gists/${syncSettings.gistId}`, { headers: { 'Authorization': `Bearer ${syncSettings.token}` } });
                 if (!res.ok) throw new Error('Failed to fetch from GitHub');
                 const gist = await res.json();
                 
-                // 1. Pull core timeline data
-                if (gist.files['timeline_data.json']) {
-                    const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
-                    Object.assign(state, cloudData);
-                    normalizeLoadedState();
-                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
-                } else {
-                    throw new Error('timeline_data.json not found in Gist');
-                }
+                if (!gist.files['timeline_data.json']) throw new Error('timeline_data.json not found in Gist');
+                
+                const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
+                Object.assign(state, cloudData);
+                normalizeLoadedState();
+                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
 
-                // 2. Simultaneously pull your Draw.io diagrams library from the same Gist!
-                if (gist.files['diagrams_data.json']) {
-                    const cloudDiagrams = JSON.parse(gist.files['diagrams_data.json'].content);
+                if (gist.files['diagram_data.json']) {
+                    const cloudDiagrams = JSON.parse(gist.files['diagram_data.json'].content);
                     diagramStore = cloudDiagrams;
                     saveDiagramStore();
                 }
                 
                 document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
                 renderAll();
-                alert("Cloud Sync: Timeline & Draw.io diagrams loaded successfully!");
             } catch (err) {
                 console.error(err);
                 document.getElementById('sync-status').innerText = "Status: Pull Failed!";
@@ -1297,7 +1294,7 @@ window.addEventListener('message', (e) => {
 
         async function forceSaveToCloud() {
             if (!syncSettings.token || !syncSettings.gistId) { alert("Please enter your GitHub Token and Gist ID first."); return; }
-            document.getElementById('sync-status').innerText = "Status: Pushing to Cloud...";
+            document.getElementById('sync-status').innerText = "Status: Pushing...";
             try {
                 const res = await fetch(`https://api.github.com/gists/${syncSettings.gistId}`, {
                     method: 'PATCH',
@@ -1305,7 +1302,7 @@ window.addEventListener('message', (e) => {
                     body: JSON.stringify({ 
                         files: { 
                             'timeline_data.json': { content: JSON.stringify(state) },
-                            'diagrams_data.json': { content: JSON.stringify(diagramStore) }
+                            'diagram_data.json': { content: JSON.stringify(diagramStore) }
                         } 
                     })
                 });
@@ -1317,13 +1314,59 @@ window.addEventListener('message', (e) => {
             }
         }
 
+        function saveToStorage() { 
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state)); 
+            if(syncSettings.token && syncSettings.gistId) {
+                document.getElementById('sync-status').innerText = "Status: Pending Cloud Save...";
+                clearTimeout(syncTimeout);
+                syncTimeout = setTimeout(forceSaveToCloud, 2000);
+            } else {
+                document.getElementById('sync-status').innerText = "Status: Saved Locally";
+            }
+        }
+
+        function normalizeLoadedState() {
+            if(!state.customTodos) state.customTodos = []; if(!state.todoTabs) state.todoTabs = ['Inbox', 'Done']; if(!state.activeTodoTab) state.activeTodoTab = 'Inbox';
+            if(!state.habitTabs) state.habitTabs = ['Main']; if(!state.activeHabitTab) state.activeHabitTab = 'Main'; if(!state.trackedHabits) state.trackedHabits = []; if(!state.habitCompletions) state.habitCompletions = {};
+            if(!state.notes) state.notes = [{id: 'n1', title: 'Main Note', content: ''}]; if(!state.notifications) state.notifications = []; if(!state.customReminders) state.customReminders = [];
+            if(!state.expandedTodoNotes) state.expandedTodoNotes = {};
+            if(!state.showTabs) state.showTabs = { todo: true, habits: true, notes: true, music: true, projects: true };
+            if(!state.layouts) state.layouts = {};
+            if(!state.savedThemes) state.savedThemes = {};
+            
+            if(state.showProjects === undefined) state.showProjects = true;
+            if(state.showNowLine === undefined) state.showNowLine = true;
+            
+            if(state.noteEditMode === undefined) state.noteEditMode = false;
+            if(state.musicEditMode === undefined) state.musicEditMode = false;
+            
+            if(!state.listTabs) state.listTabs = ['Main List'];
+            if(!state.activeListTab) state.activeListTab = state.listTabs[0];
+            if(!state.listItems) state.listItems = [];
+            if(!state.activeTodoView) state.activeTodoView = 'todo';
+            if(!state.expandedListNotes) state.expandedListNotes = {};
+
+            if(!state.musicEmbedTabs) state.musicEmbedTabs = ['Favorites']; if(!state.activeMusicEmbedTab) state.activeMusicEmbedTab = 'Favorites'; if(!state.musicEmbeds) state.musicEmbeds = [];
+            if(!state.radioTabs) state.radioTabs = ['Stations']; if(!state.activeRadioTab) state.activeRadioTab = 'Stations'; if(!state.radios) state.radios = [];
+
+            if(!state.projectTabs || state.projectTabs.length === 0) state.projectTabs = ['Main Project'];
+            if(!state.activeProjectTab) state.activeProjectTab = state.projectTabs[0];
+            if(!state.projectCategories) state.projectCategories = {};
+            if(!state.projectCategories[state.activeProjectTab]) state.projectCategories[state.activeProjectTab] = ['General'];
+            if(!state.activeProjectCategory) state.activeProjectCategory = {};
+            if(!state.activeProjectCategory[state.activeProjectTab]) state.activeProjectCategory[state.activeProjectTab] = 'General';
+            if(!state.projectItems) state.projectItems = [];
+            if(!state.expandedProjectNotes) state.expandedProjectNotes = {};
+
+            state.events.forEach(e => { if (!e.type) e.type = e.isMilestone ? 'milestone' : 'event'; if (e.zIndex === undefined) e.zIndex = 0; if (e.inTodoList && !e.todoTab) e.todoTab = 'Inbox'; });
+            state.customTodos.forEach(c => { if(!c.tab) c.tab = 'Inbox'; if(!c.type) c.type = 'todo'; });
+            state.habitEditMode = false; state.habitCreateMode = false; state.todoEditMode = false; state.projectEditMode = false; state.noteEditMode = false; 
+        }
+
         async function bootApp() {
             document.getElementById('sync-token').value = syncSettings.token;
             document.getElementById('sync-gist').value = syncSettings.gistId;
             
-            // Safety Step 1: Always load local browser memory first so the app is never blank
-            loadFromLocalFallback();
-
             if (syncSettings.token && syncSettings.gistId) {
                 document.getElementById('sync-status').innerText = "Status: Booting from Cloud...";
                 try {
@@ -1333,11 +1376,10 @@ window.addEventListener('message', (e) => {
                         if (gist.files['timeline_data.json']) {
                             const cloudData = JSON.parse(gist.files['timeline_data.json'].content);
                             Object.assign(state, cloudData);
-                            // Safety Step 2: Cache cloud pull to localStorage immediately
-                            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
                         }
-                        if (gist.files['diagrams_data.json']) {
-                            diagramStore = JSON.parse(gist.files['diagrams_data.json'].content);
+                        if (gist.files['diagram_data.json']) {
+                            const cloudDiagrams = JSON.parse(gist.files['diagram_data.json'].content);
+                            diagramStore = cloudDiagrams;
                             saveDiagramStore();
                         }
                         document.getElementById('sync-status').innerText = "Status: Synced (Cloud)";
@@ -1347,6 +1389,8 @@ window.addEventListener('message', (e) => {
                     document.getElementById('sync-status').innerText = "Status: Cloud unreachable, using Local";
                     loadFromLocalFallback();
                 }
+            } else {
+                loadFromLocalFallback();
             }
             
             normalizeLoadedState();
@@ -1359,6 +1403,9 @@ window.addEventListener('message', (e) => {
         function loadFromLocalFallback() {
             const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
             if (savedData) { try { Object.assign(state, JSON.parse(savedData)); } catch (e) { console.error("Corrupted local state", e); } }
+            
+            const savedDiagrams = localStorage.getItem(DIAGRAMS_STORAGE_KEY);
+            if (savedDiagrams) { try { diagramStore = JSON.parse(savedDiagrams); } catch (e) { console.error("Corrupted local diagrams", e); } }
         }
 
         function renderAll() {
@@ -1427,46 +1474,62 @@ window.addEventListener('message', (e) => {
             }
         };
 
-        window.exportData = () => {
-    // Bundle both the core state and the separate diagram store
-    const backupBundle = {
-        timelineState: state,
-        diagrams: diagramStore,
-        version: '3.0_split'
-    };
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupBundle));
-    const dlAnchorElem = document.createElement('a');
-    dlAnchorElem.setAttribute("href", dataStr);
-    dlAnchorElem.setAttribute("download", "infinity_timeline_complete_backup.json");
-    dlAnchorElem.click();
-};
+        window.exportTimelineData = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(state));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "infinity_timeline_backup.json");
+            dlAnchorElem.click();
+        };
 
-window.importData = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            const imported = JSON.parse(e.target.result);
-            // Check if it is a split bundle or legacy single-state file
-            if (imported.timelineState && imported.diagrams) {
-                Object.assign(state, imported.timelineState);
-                diagramStore = imported.diagrams;
-                saveDiagramStore();
-            } else {
-                Object.assign(state, imported);
-            }
-            normalizeLoadedState();
-            saveToStorage();
-            renderAll();
-            alert("Data and offline diagrams imported successfully!");
-        } catch (err) {
-            alert("Error: Invalid JSON file.");
-        }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-};
+        window.exportDiagramData = () => {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(diagramStore));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "infinity_diagrams_backup.json");
+            dlAnchorElem.click();
+        };
+
+        window.importTimelineData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    // Legacy bundle check, just in case they load an old backup
+                    if (imported.timelineState && imported.diagrams) { Object.assign(state, imported.timelineState); } 
+                    else { Object.assign(state, imported); }
+                    
+                    normalizeLoadedState();
+                    saveToStorage();
+                    renderAll();
+                    alert("Timeline data imported successfully!");
+                } catch (err) { alert("Error: Invalid JSON file."); }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        };
+
+        window.importDiagramData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    // Legacy bundle check
+                    if (imported.timelineState && imported.diagrams) { diagramStore = imported.diagrams; } 
+                    else { diagramStore = imported; }
+                    
+                    saveDiagramStore();
+                    renderProjects();
+                    alert("Diagram data imported successfully!");
+                } catch (err) { alert("Error: Invalid JSON file."); }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        };
 
         function getGenericMoveDropdownHTML(tabs, currentTab, funcName, id) {
             let opts = tabs.map(t => `<option value="${t}" ${t===currentTab?'selected':''}>${t}</option>`).join('');
