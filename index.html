@@ -1272,15 +1272,25 @@ window.addEventListener('message', (e) => {
         // Helper to interact with GitHub Repo API
         async function ghApiCall(method, path, bodyObj = null) {
             const [owner, repo] = syncSettings.repo.split('/');
-            // FIX: Add cache-busting timestamp to bypass GitHub's 60-second API cache
-            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?t=${Date.now()}`;
+            
+            // FIX: Only apply the cache-busting timestamp to GET (Pull) requests. 
+            // GitHub rejects PUT (Push) requests that have unrecognized query parameters!
+            const cacheBuster = method === 'GET' ? `?t=${Date.now()}` : '';
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}${cacheBuster}`;
+            
             const headers = { 
                 'Authorization': `Bearer ${syncSettings.token}`, 
-                'Accept': 'application/vnd.github.v3+json',
-                'If-None-Match': ''
+                'Accept': 'application/vnd.github.v3+json'
             };
+            
+            // Force browser to ignore cache for fetching
+            if (method === 'GET') {
+                headers['If-None-Match'] = '';
+            }
+            
             const opts = { method, headers, cache: 'no-store' };
             if (bodyObj) opts.body = JSON.stringify(bodyObj);
+            
             return fetch(url, opts);
         }
 
@@ -1334,9 +1344,11 @@ window.addEventListener('message', (e) => {
         async function processSyncQueue() {
             if (isSyncing || ghQueue.length === 0 || !syncSettings.token || !syncSettings.repo) return;
             isSyncing = true;
-            document.getElementById('sync-status').innerText = "Status: Pushing...";
 
             while(ghQueue.length > 0) {
+                // UPDATE UI: Show exactly how many files are currently uploading
+                document.getElementById('sync-status').innerText = `Status: Syncing to Cloud (${ghQueue.length} left)...`;
+                
                 const task = ghQueue.shift();
                 try {
                     let sha = null;
@@ -1351,17 +1363,32 @@ window.addEventListener('message', (e) => {
                             await ghApiCall('DELETE', task.path, { message: `Delete ${task.path}`, sha: sha });
                         }
                     } else if (task.action === 'upsert') {
-                        // FIX: Compress directly to Base64 (Safe for GitHub API)
                         const b64Content = LZString.compressToBase64(task.content);
-                        
                         const body = {
                             message: `Update ${task.path}`,
                             content: b64Content
                         };
                         if (sha) body.sha = sha;
 
-                        await ghApiCall('PUT', task.path, body);
+                        const putRes = await ghApiCall('PUT', task.path, body);
+                        
+                        // UPGRADED FIX: Catch ALL GitHub rejections (409, 422, 403) and retry up to 3 times.
+                        if (!putRes.ok) {
+                            task.retries = (task.retries || 0) + 1;
+                            if (task.retries <= 3) {
+                                console.warn(`GitHub API busy for ${task.path}. Retrying (${task.retries}/3)...`);
+                                ghQueue.unshift(task); // Put it back at the front of the line
+                                await new Promise(r => setTimeout(r, 2000)); // Wait 2 seconds for GitHub to catch up
+                                continue;
+                            } else {
+                                console.error(`Failed to sync ${task.path} after 3 attempts.`);
+                            }
+                        }
                     }
+                    
+                    // Mandatory 1-second delay between GitHub API writes
+                    await new Promise(r => setTimeout(r, 1000));
+                    
                 } catch (err) {
                     console.error(`Failed to sync ${task.path}`, err);
                 }
@@ -1373,7 +1400,7 @@ window.addEventListener('message', (e) => {
         // NEW: A manual push function to force the initial upload of everything
         async function forcePushToCloud() {
             if (!syncSettings.token || !syncSettings.repo) { alert("Please enter your GitHub Token and Repo first."); return; }
-            document.getElementById('sync-status').innerText = "Status: Force Pushing...";
+            document.getElementById('sync-status').innerText = "Status: Queuing Force Push...";
             
             try {
                 // Queue Timeline
@@ -1384,8 +1411,7 @@ window.addEventListener('message', (e) => {
                     triggerCloudSync(`diagrams/${diagId}.txt`, JSON.stringify(diagramStore[diagId]), 'upsert');
                 }
                 
-                // The queue will automatically handle uploading them safely
-                alert("Upload started! Watch the status text to see when it finishes.");
+                alert("Upload started! The Sync Status text will show you the exact progress of your files.");
             } catch (err) {
                 console.error("Force push failed:", err);
                 document.getElementById('sync-status').innerText = "Status: Push Failed!";
@@ -1398,7 +1424,8 @@ window.addEventListener('message', (e) => {
             ghQueue = ghQueue.filter(q => q.path !== path);
             ghQueue.push({ path, content, action });
             
-            document.getElementById('sync-status').innerText = "Status: Pending Cloud Save...";
+            // UPDATE UI: Show the pending queue size
+            document.getElementById('sync-status').innerText = `Status: Pending Cloud Save (${ghQueue.length} files)...`;
             clearTimeout(syncTimeout);
             syncTimeout = setTimeout(processSyncQueue, 2000);
         }
@@ -1497,8 +1524,8 @@ window.addEventListener('message', (e) => {
             checkNotifications();
             applyAtmosphere();
 
-            // FIX: Auto-pull removed. The local database is the undisputed master. 
-            // Only pull manually via the UI button when moving to a new computer!
+            // REMOVED: The forceLoadFromCloud() call that was causing the Ghost Reverts.
+            // The local IndexedDB is now the master truth. Only pull manually via the UI button.
         }
 
         function renderAll() {
