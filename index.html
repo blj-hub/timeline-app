@@ -9,18 +9,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="manifest" href="manifest.json">
-
-<meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="manifest.json">
     
-    <!-- Added libraries for Compression and IndexedDB -->
+    <!-- Libraries for Compression and IndexedDB -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
-
-    <style>
-        :root {
 
     <style>
         :root {
@@ -865,7 +857,6 @@
 
     <script>
         // --- Core State & Configuration ---
-        const LOCAL_STORAGE_KEY = 'infinity_timeline_v32';
         const PALETTE_KEY = 'infinity_palette_v4';
         const SYNC_KEY = 'infinity_sync_v1';
         
@@ -879,18 +870,13 @@
         let userPalette = JSON.parse(localStorage.getItem(PALETTE_KEY)) || ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
         let editingPaletteIdx = -1;
 
-        let syncSettings = JSON.parse(localStorage.getItem(SYNC_KEY)) || { token: '', gistId: '' };
-		
-		// --- Split Diagram Storage & Offline Engine ---
-		const DIAGRAMS_STORAGE_KEY = 'infinity_diagrams_v1';
-		let diagramStore = JSON.parse(localStorage.getItem(DIAGRAMS_STORAGE_KEY)) || {};
+        let syncSettings = JSON.parse(localStorage.getItem(SYNC_KEY)) || { token: '', repo: '' };
+        
+        // Initialize the empty diagram store in memory
+        let diagramStore = {};
 
-		function saveDiagramStore() {
-			localStorage.setItem(DIAGRAMS_STORAGE_KEY, JSON.stringify(diagramStore));
-		}
-
-		// Helper to download standalone offline SVGs (with embedded editable XML)
-		window.downloadOfflineSvg = (diagId) => {
+        // Helper to download standalone offline SVGs (with embedded editable XML)
+        window.downloadOfflineSvg = (diagId) => {
             const diag = diagramStore[diagId];
             if (!diag || !diag.svgData) return alert("Diagram data not found!");
             
@@ -1286,9 +1272,14 @@ window.addEventListener('message', (e) => {
         // Helper to interact with GitHub Repo API
         async function ghApiCall(method, path, bodyObj = null) {
             const [owner, repo] = syncSettings.repo.split('/');
-            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-            const headers = { 'Authorization': `Bearer ${syncSettings.token}`, 'Accept': 'application/vnd.github.v3+json' };
-            const opts = { method, headers };
+            // FIX: Add cache-busting timestamp to bypass GitHub's 60-second API cache
+            const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?t=${Date.now()}`;
+            const headers = { 
+                'Authorization': `Bearer ${syncSettings.token}`, 
+                'Accept': 'application/vnd.github.v3+json',
+                'If-None-Match': ''
+            };
+            const opts = { method, headers, cache: 'no-store' };
             if (bodyObj) opts.body = JSON.stringify(bodyObj);
             return fetch(url, opts);
         }
@@ -1477,11 +1468,13 @@ window.addEventListener('message', (e) => {
 
         async function loadFromLocalFallback() {
             try {
-                // Load Timeline
+                // 1. Load Timeline
                 const timelineRec = await db.timeline.get('main');
-                if (timelineRec) { Object.assign(state, JSON.parse(timelineRec.data)); }
+                if (timelineRec) { 
+                    Object.assign(state, JSON.parse(timelineRec.data)); 
+                }
                 
-                // Load all Diagrams
+                // 2. Load all Diagrams
                 const allDiags = await db.diagrams.toArray();
                 allDiags.forEach(d => {
                     diagramStore[d.id] = JSON.parse(d.data);
@@ -1492,12 +1485,11 @@ window.addEventListener('message', (e) => {
         }
 
         async function bootApp() {
-            document.getElementById('sync-token').value = syncSettings.token;
-            // Update the UI placeholder
+            if (!syncSettings.repo && syncSettings.gistId) { syncSettings.repo = syncSettings.gistId; }
+            document.getElementById('sync-token').value = syncSettings.token || '';
             document.getElementById('sync-gist').placeholder = "e.g., username/repo";
             document.getElementById('sync-gist').value = syncSettings.repo || '';
             
-            // We always load from local IndexedDB first for a fast, offline boot
             await loadFromLocalFallback();
             normalizeLoadedState();
             renderAll();
@@ -1505,18 +1497,8 @@ window.addEventListener('message', (e) => {
             checkNotifications();
             applyAtmosphere();
 
-            // Then we passively try to fetch latest from cloud in background
-            if (syncSettings.token && syncSettings.repo) {
-                forceLoadFromCloud();
-            }
-        }
-
-        function loadFromLocalFallback() {
-            const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if (savedData) { try { Object.assign(state, JSON.parse(savedData)); } catch (e) { console.error("Corrupted local state", e); } }
-            
-            const savedDiagrams = localStorage.getItem(DIAGRAMS_STORAGE_KEY);
-            if (savedDiagrams) { try { diagramStore = JSON.parse(savedDiagrams); } catch (e) { console.error("Corrupted local diagrams", e); } }
+            // FIX: Auto-pull removed. The local database is the undisputed master. 
+            // Only pull manually via the UI button when moving to a new computer!
         }
 
         function renderAll() {
@@ -1622,18 +1604,21 @@ window.addEventListener('message', (e) => {
             event.target.value = '';
         };
 
-        window.importDiagramData = (event) => {
+       window.importDiagramData = (event) => {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const imported = JSON.parse(e.target.result);
-                    // Legacy bundle check
                     if (imported.timelineState && imported.diagrams) { diagramStore = imported.diagrams; } 
                     else { diagramStore = imported; }
                     
-                    saveDiagramStore();
+                    // FIX: Save each diagram to IndexedDB so they survive refreshes
+                    for (const diagId in diagramStore) {
+                        saveDiagramStore(diagId);
+                    }
+                    
                     renderProjects();
                     alert("Diagram data imported successfully!");
                 } catch (err) { alert("Error: Invalid JSON file."); }
@@ -2345,7 +2330,7 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
 
             if (!diagramStore[diagId]) {
                 diagramStore[diagId] = { id: diagId, title: title, xml: '', svgData: null, created: Date.now() };
-                saveDiagramStore();
+                saveDiagramStore(diagId); // <-- Pass diagId here
             }
 
             const wndId = 'popout_drawio_' + Date.now();
@@ -2361,9 +2346,23 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
                 state.atmoInteractive = true;
                 state.atmoMode = 'video';
                 state.atmoVideoUrl = diagId;
-                syncAtmoSettingsForCurrentUrl(); // Loads diagram fallback settings!
+                syncAtmoSettingsForCurrentUrl();
                 saveToStorage();
-                applyAtmosphere(true);
+                
+                // FIX: Inject the iframe directly into the atmosphere layer
+                const layer = document.getElementById('atmosphere-layer');
+                const dimOpacity = state.atmoDim !== undefined ? state.atmoDim : '0.6';
+                const blurAmt = state.atmoBlur || '5px';
+                
+                layer.dataset.mode = 'video';
+                layer.dataset.url = diagId;
+                
+                layer.innerHTML = `
+                    <iframe id="active-drawio-iframe" src="${embedUrl}" style="width:100vw; height:100%; border:none; position:absolute; top:0; left:0; z-index:1;"></iframe>
+                    <div id="atmo-overlay" style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,${dimOpacity}); backdrop-filter:blur(${blurAmt}); z-index:2; pointer-events:none; transition: background 0.1s, backdrop-filter 0.1s, opacity 0.2s;"></div>
+                `;
+                
+                updateAtmoInteractivity();
                 return;
             }
 
@@ -2469,7 +2468,7 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
                     targetDiagId = 'diag_' + Date.now();
                     const diagTitle = title || 'Untitled Diagram';
                     diagramStore[targetDiagId] = { id: targetDiagId, title: diagTitle, xml: '', svgData: null, created: Date.now() };
-                    saveDiagramStore();
+                    saveDiagramStore(targetDiagId); // <-- Pass targetDiagId here
                     openDrawioWorkspace(targetDiagId, diagTitle);
                 } else {
                     // Attach existing diagram from library!
@@ -3086,8 +3085,18 @@ window.openDrawioWorkspace = (existingDiagId = null, title = "New Diagram", mode
             const isDiagram = currentUrl.startsWith('diag_') || diagramStore[currentUrl];
             const isCurrentlyEditingBg = !!document.querySelector('#atmosphere-layer #active-drawio-iframe');
 
-            // Cache check: Bypass if forceRefresh is true, if actively editing in bg, or if diagram timestamp updated!
-            if (!forceRefresh && !isCurrentlyEditingBg && existingMedia && existingOverlay && layer.dataset.url === currentUrl && layer.dataset.mode === mode) {
+            // FIX: Protect the background iframe from being overwritten by passive renders while editing!
+            if (isCurrentlyEditingBg && activeDiagramSession === currentUrl) {
+                if (existingOverlay) {
+                    existingOverlay.style.background = `rgba(0,0,0,${dimOpacity})`;
+                    existingOverlay.style.backdropFilter = `blur(${blurAmt})`;
+                }
+                updateAtmoInteractivity();
+                return;
+            }
+
+            // Cache check: Bypass if forceRefresh is true, or if diagram timestamp updated!
+            if (!forceRefresh && existingMedia && existingOverlay && layer.dataset.url === currentUrl && layer.dataset.mode === mode) {
                 if (!isDiagram || layer.dataset.updated == (diagramStore[currentUrl]?.updated || 0)) {
                     existingOverlay.style.background = `rgba(0,0,0,${dimOpacity})`;
                     existingOverlay.style.backdropFilter = `blur(${blurAmt})`;
