@@ -25,7 +25,12 @@
             --input-bg: #0f1115; --input-border: #3f4451;
             --btn-prim-bg: #f0f0f0; --btn-prim-text: #0f1115;
             --btn-sec-bg: #2a2d35; --btn-sec-text: #f0f0f0;
+            --main-ui-scale: 1; --paint-ui-scale: 1;
         }
+
+        #ui-layer-left, #ui-layer-right, #global-sync-indicator, #instructions, .modal-window, .tool-window:not(#tool-paint) { zoom: var(--main-ui-scale); }
+        #tool-paint .drag-header { zoom: var(--main-ui-scale); }
+        #paint-app-root .toolbar, #paint-app-root .properties-panel { zoom: var(--paint-ui-scale); }
 
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
 
@@ -358,8 +363,7 @@
             </div>
 			
         </div>
-        <button class="floating-btn secondary circle-btn" id="btn-canvas-lock" title="Tap to Reset View, Hold to Lock Canvas" style="position: absolute; bottom: 20px; left: 20px; z-index: 10; width: 44px; height: 44px; font-size: 20px; -webkit-touch-callout: none; user-select: none; touch-action: none;">🎯</button>
-        <div id="instructions" style="left: 75px; bottom: 32px;"><strong>Dbl-click</strong> empty space to add • Pinch to Zoom • Hover over backgrounds for Edit options</div>
+        <div id="instructions"><strong>Dbl-click</strong> empty space to add • Pinch to Zoom • Hover over backgrounds for Edit options</div>
     </div>
 
     <!-- ================= FLOATING TOOL WINDOWS ================= -->
@@ -1061,6 +1065,20 @@
                 <div id="themes-list-container" style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;"></div>
             
 				<hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
+                
+                <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">UI Scaling (Device Specific)</h4>
+                <div class="form-row" style="align-items:center;">
+                    <label style="flex:1; font-size:12px;">Main UI Scale:</label>
+                    <input type="range" id="inp-main-scale" min="0.5" max="1.5" step="0.05" value="1" oninput="updateUIScales()" style="flex:2;">
+                    <span id="val-main-scale" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">100%</span>
+                </div>
+                <div class="form-row" style="align-items:center; margin-bottom: 10px;">
+                    <label style="flex:1; font-size:12px;">Paint App Menus:</label>
+                    <input type="range" id="inp-paint-scale" min="0.5" max="1.5" step="0.05" value="1" oninput="updateUIScales()" style="flex:2;">
+                    <span id="val-paint-scale" style="width:40px; text-align:right; font-size:11px; font-weight:bold;">100%</span>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid var(--modal-border); margin: 10px 0;">
 
                 <h4 style="font-size: 14px; margin-bottom: 5px; color: var(--accent-color);">Draw.io Editor Theme</h4>
                 <div class="segmented-control" style="margin-bottom:10px;">
@@ -1627,7 +1645,7 @@ window.addEventListener('message', (e) => {
         const state = {
             viewCenterTime: Date.now(), pxPerMs: 0.00002, events: [],
 			showTasks: true, showBackgrounds: true, showHabits: true, showFinance: true, showProjects: true, showBirthdays: true,
-            showNowLine: true, canvasLocked: false,
+            showNowLine: true,
             
             // Todo & Lists State
             todoTabs: ['Inbox', 'Done'], activeTodoTab: 'Inbox', showTodoTime: false, customTodos: [], todoEditMode: false, expandedTodoNotes: {},
@@ -1665,6 +1683,28 @@ window.addEventListener('message', (e) => {
         
         let loadedTheme = JSON.parse(localStorage.getItem('infinity_theme_v3'));
         let activeTheme = loadedTheme ? {...defaultDarkTheme, ...loadedTheme} : {...defaultDarkTheme};
+
+        let uiScales = JSON.parse(localStorage.getItem('infinity_ui_scales')) || { main: 1, paint: 1 };
+
+        window.applyUIScales = () => {
+            document.documentElement.style.setProperty('--main-ui-scale', uiScales.main);
+            document.documentElement.style.setProperty('--paint-ui-scale', uiScales.paint);
+            
+            const mInp = document.getElementById('inp-main-scale');
+            if(mInp) { mInp.value = uiScales.main; document.getElementById('val-main-scale').innerText = Math.round(uiScales.main * 100) + '%'; }
+            const pInp = document.getElementById('inp-paint-scale');
+            if(pInp) { pInp.value = uiScales.paint; document.getElementById('val-paint-scale').innerText = Math.round(uiScales.paint * 100) + '%'; }
+            
+            // Trigger resize so Draw.io and Paint canvases instantly recalibrate their bounds
+            window.dispatchEvent(new Event('resize'));
+        };
+
+        window.updateUIScales = () => {
+            uiScales.main = parseFloat(document.getElementById('inp-main-scale').value) || 1;
+            uiScales.paint = parseFloat(document.getElementById('inp-paint-scale').value) || 1;
+            localStorage.setItem('infinity_ui_scales', JSON.stringify(uiScales));
+            applyUIScales();
+        };
 
         function applyTheme() {
             const r = document.documentElement; 
@@ -2167,7 +2207,6 @@ window.addEventListener('message', (e) => {
             
             if(state.showProjects === undefined) state.showProjects = true;
             if(state.showNowLine === undefined) state.showNowLine = true;
-            if(state.canvasLocked === undefined) state.canvasLocked = false;
             
             if(state.noteEditMode === undefined) state.noteEditMode = false;
             if(state.musicEditMode === undefined) state.musicEditMode = false;
@@ -2245,11 +2284,11 @@ window.addEventListener('message', (e) => {
                 if (typeof renderPomoSequence === 'function') renderPomoSequence();
             }
 
+            applyUIScales();
             renderAll();
             resizeCanvas();
             checkNotifications();
             applyAtmosphere();
-            if (typeof toggleCanvasLock === 'function') toggleCanvasLock(true); // Set initial UI
 
             // Perform a safe smart-pull on boot to check for external updates.
             // The conflict resolution guardian will protect unsynced local changes.
@@ -5105,7 +5144,6 @@ bDays.forEach(b => {
 
         canvas.addEventListener('pointerdown', (e) => {
             if (modalOverlay.classList.contains('active')) return;
-            if (state.canvasLocked) return;
             
             for (let box of state.bgHitboxes) {
                 if (e.clientX >= box.left && e.clientX <= box.right && e.clientY >= box.top && e.clientY <= box.bottom) {
@@ -5177,9 +5215,7 @@ bDays.forEach(b => {
         window.addEventListener('pointercancel', handlePointerRemove);
 
         canvas.addEventListener('wheel', (e) => {
-            if (modalOverlay.classList.contains('active')) return; 
-            if (state.canvasLocked) return;
-            e.preventDefault(); 
+            if (modalOverlay.classList.contains('active')) return; e.preventDefault(); 
             const timeAtCursor = state.viewCenterTime + (e.clientX - canvas.width / 2) / state.pxPerMs;
             state.pxPerMs = Math.max(config.minScale, Math.min(config.maxScale, state.pxPerMs * (e.deltaY > 0 ? 0.9 : 1.1)));
             state.viewCenterTime = timeAtCursor - (e.clientX - canvas.width / 2) / state.pxPerMs; render();
@@ -5187,57 +5223,15 @@ bDays.forEach(b => {
 
         canvas.addEventListener('dblclick', (e) => {
             if (modalOverlay.classList.contains('active')) return;
-            if (state.canvasLocked) return;
             const t = xToTime(e.clientX); const evt = { id: 'evt_' + Date.now(), title: 'New Event', start: t, end: t + 3600000, type: 'event', color: '#3b82f6', notes: '' };
             state.events.push(evt); saveToStorage(); render(); openModal(evt);
         });
 
-        window.resetTimelineView = () => {
-            state.pxPerMs = 0.00002; // Reset zoom to default scale
+        document.getElementById('btn-snap-now').addEventListener('click', () => {
             const target = Date.now(), start = state.viewCenterTime, diff = target - start; let p = 0;
             function anim() { if ((p += 0.08) >= 1) { state.viewCenterTime = target; render(); return; } state.viewCenterTime = start + (diff * (1 - Math.pow(1 - p, 3))); render(); requestAnimationFrame(anim); }
             anim();
-        };
-
-        window.toggleCanvasLock = (forceInit = false) => {
-            if (!forceInit) state.canvasLocked = !state.canvasLocked;
-            const btn = document.getElementById('btn-canvas-lock');
-            if (state.canvasLocked) {
-                btn.innerText = '🔒';
-                btn.style.color = '#ef4444';
-                canvas.style.touchAction = 'auto'; // Re-enable native phone scrolling!
-            } else {
-                btn.innerText = '🎯';
-                btn.style.color = '';
-                canvas.style.touchAction = 'none'; // Lock native scrolling for canvas drag
-            }
-            if (!forceInit) saveToStorage();
-        };
-
-        // Long Press & Tap Engine for the new button
-        const lockBtn = document.getElementById('btn-canvas-lock');
-        let lockPressTimer;
-        let lockIsLongPress = false;
-
-        lockBtn.addEventListener('pointerdown', (e) => {
-            lockIsLongPress = false;
-            lockPressTimer = setTimeout(() => {
-                lockIsLongPress = true;
-                toggleCanvasLock();
-                if (navigator.vibrate) navigator.vibrate(50); // Small haptic bump on mobile
-            }, 500);
         });
-
-        lockBtn.addEventListener('pointerup', () => {
-            clearTimeout(lockPressTimer);
-            if (!lockIsLongPress) resetTimelineView(); // It was a quick tap
-        });
-
-        lockBtn.addEventListener('pointercancel', () => clearTimeout(lockPressTimer));
-        lockBtn.addEventListener('contextmenu', e => e.preventDefault()); // Stop native popup *only* here
-
-        // Map the old menu button to the new unified function
-        document.getElementById('btn-snap-now').addEventListener('click', () => resetTimelineView());
 
         // Toggle UI Triggers
         document.getElementById('btn-toggle-tasks').addEventListener('click', (e) => { state.showTasks = !state.showTasks; e.target.innerText = state.showTasks ? 'Hide Tasks/Milestones' : 'Show Tasks/Milestones'; render(); });
